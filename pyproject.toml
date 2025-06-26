@@ -1,0 +1,19 @@
+[project]
+name = "tarot"
+version = "0.1.0"
+description = "Aplicação de MCTS em Jogos com Informação Imperfeita"
+authors = [{ name = "Gustavo Ceccon" }]
+readme = "README.md"
+license = { text = "MIT" }
+keywords = ["tarot", "card-game", "mcts", "ai", "game-theory"]
+requires-python = ">=3.12"
+dependencies = [
+    "scipy>=1.16.0",
+    "open-spiel>=1.6",
+    "jupyterlab>=4.4.3",
+    "matplotlib>=3.10.3",
+    "numpy>=2.3.1",
+]
+
+[project.urls]
+Homepage = "https://github.com/seduq/tarot"
