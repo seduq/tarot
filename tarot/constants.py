@@ -19,13 +19,27 @@ class Phase(Enum):
     END = 7
 
 
+PASS = 600
+PETIT = 601
+GARDE = 602
+GARDE_SANS = 603
+GARDE_CONTRE = 604
+
+ALPHA = {
+    PASS: 0.2,
+    PETIT: 0.2,
+    GARDE: 0.2,
+    GARDE_SANS: 0.2,
+    GARDE_CONTRE: 0.2
+}
+
 POINTS_PER_BOUT = {
     3: 36,
     2: 41,
     1: 46,
     0: 51
 }
-ALPHA = {
+BETA = {
     3: 0.25,
     2: 0.25,
     1: 0.25,
@@ -39,7 +53,7 @@ POIGNEE_BONUS = {
     13: 30,
     15: 40,
 }
-BETA = {
+GAMMA = {
     0: 0.25,
     10: 0.25,
     13: 0.25,
@@ -71,18 +85,6 @@ MIN_POINTS = (DECK_SIZE // NUM_PLAYERS) * 0.5
 NUM_BOUTS = len(BOUTS)
 NUM_TRUMPS = TRUMPS
 
-PASS = 600
-PETIT = 601
-GARDE = 602
-GARDE_SANS = 603
-GARDE_CONTRE = 604
-GAMMA = {
-    PASS: 0.2,
-    PETIT: 0.2,
-    GARDE: 0.2,
-    GARDE_SANS: 0.2,
-    GARDE_CONTRE: 0.2
-}
 BIDS = [PASS, PETIT, GARDE, GARDE_SANS, GARDE_CONTRE]
 NUM_BIDS = len(BIDS)
 NUM_BID_SIZE = NUM_PLAYERS

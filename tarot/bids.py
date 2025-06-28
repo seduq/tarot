@@ -4,9 +4,15 @@ from . import constants as Const
 
 
 class Bid:
+    """
+    Provides static methods for handling bids in the Tarot card game, including naming, multipliers, legal bid generation, and determining the taker.
+    """
 
     @staticmethod
     def name(bid: int) -> str:
+        """
+        Returns the string name of a bid value.
+        """
         bid_name = ""
         if bid == Const.PASS:
             bid_name = "Pass"
@@ -24,6 +30,9 @@ class Bid:
 
     @staticmethod
     def multiplier(bid: int) -> int:
+        """
+        Returns the multiplier associated with a bid value.
+        """
         if bid == Const.PASS:
             return 0
         if bid == Const.GARDE:
@@ -36,6 +45,9 @@ class Bid:
 
     @staticmethod
     def legal_bids(current_bids: List[int]) -> List[Tuple[int, float]]:
+        """
+        Returns a list of legal bids and their probabilities given the current bidding history.
+        """
         legal_bids = [Const.PASS]
         bid = max(current_bids) if current_bids else Const.PASS
         if bid == Const.PASS:
@@ -48,15 +60,19 @@ class Bid:
         elif bid == Const.GARDE_SANS:
             legal_bids += [Const.GARDE_CONTRE]
         legal_bid_outcomes = []
-        sum_bids = sum(Const.GAMMA[b] for b in legal_bids)
-        sum_all_bids = sum(Const.GAMMA[b] for b in Const.GAMMA)
+        sum_bids = sum(Const.ALPHA[b] for b in legal_bids)
+        sum_all_bids = sum(Const.ALPHA[b] for b in Const.ALPHA)
         for b in legal_bids:
             legal_bid_outcomes.append(
-                (b, Const.GAMMA[b] * sum_all_bids / sum_bids))
+                (b, Const.ALPHA[b] * sum_all_bids / sum_bids))
         return legal_bid_outcomes
 
     @staticmethod
     def finish_bidding(bids: List[int]) -> Tuple[int, int]:
+        """
+        Determines the taker and the highest bid from the list of bids.
+        Returns a tuple (taker, max_bid).
+        """
         max_bid = max(bids)
         taker = bids.index(max_bid)
         return taker, max_bid

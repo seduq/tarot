@@ -1,13 +1,11 @@
 from typing import List, Set, Tuple
 import numpy as np
-
 from .actions import Action
 from .bids import Bid
 from .cards import Card
 from .utils import Utils
 from . import constants as Const
 from .constants import Phase
-
 import pyspiel
 from itertools import product, combinations
 

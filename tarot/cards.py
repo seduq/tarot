@@ -5,8 +5,15 @@ from . import constants as Const
 
 
 class Card:
+    """
+    Provides static methods for card operations in the Tarot card game, including card naming, suit/rank extraction, deck generation, dealing, and point calculation.
+    """
+
     @staticmethod
     def name(card: int) -> str:
+        """
+        Returns the string name of a card given its integer representation.
+        """
         suit = Card.suit(card)
         rank = Card.rank(card)
         if Card.is_trump(card):
@@ -24,14 +31,23 @@ class Card:
 
     @staticmethod
     def suit(card: int) -> int:
+        """
+        Returns the suit of the card as an integer.
+        """
         return card // 100
 
     @staticmethod
     def rank(card: int) -> int:
+        """
+        Returns the rank of the card as an integer.
+        """
         return card % 100
 
     @staticmethod
     def from_idx(card_idx: int) -> int:
+        """
+        Converts a card index to its integer representation.
+        """
         if (card_idx + 1) >= Const.DECK_SIZE - Const.NUM_TRUMPS:
             return (card_idx - (Const.DECK_SIZE - Const.NUM_TRUMPS)) + 100 * Const.TRUMP
         card_idx -= Const.NUM_TRUMPS
@@ -41,6 +57,9 @@ class Card:
 
     @staticmethod
     def to_idx(card_idx: int) -> int:
+        """
+        Converts a card integer representation to its index in the deck.
+        """
         if Card.is_trump(card_idx):
             return (card_idx - 500) + (Const.DECK_SIZE - Const.NUM_TRUMPS)
         suit = Card.suit(card_idx) - 1
@@ -49,14 +68,23 @@ class Card:
 
     @staticmethod
     def is_trump(card: int) -> bool:
+        """
+        Returns True if the card is a trump, False otherwise.
+        """
         return Card.suit(card) == Const.TRUMP
 
     @staticmethod
     def is_king(card: int) -> bool:
+        """
+        Returns True if the card is a king, False otherwise.
+        """
         return Card.rank(card) == Const.KING
 
     @staticmethod
     def value(card: int) -> float:
+        """
+        Returns the point value of the card according to Tarot rules.
+        """
         rank = Card.rank(card)
         if Card.is_trump(card):
             if (rank == Const.PETIT or rank == Const.MONDE or rank == Const.FOU):
@@ -75,6 +103,9 @@ class Card:
 
     @staticmethod
     def deck() -> List[int]:
+        """
+        Returns a list of all cards in the Tarot deck.
+        """
         trumps = [Const.TRUMP * 100 + i for i in range(Const.NUM_TRUMPS)]
         hearts = [Const.HEART * 100 + (i + 1) for i in range(Const.KING)]
         diamonds = [Const.DIAMOND * 100 + (i + 1) for i in range(Const.KING)]
@@ -84,6 +115,10 @@ class Card:
 
     @staticmethod
     def deal(deck: List[int]) -> Tuple[List[int], List[List[int]]]:
+        """
+        Shuffles and deals the deck into the chien and player hands.
+        Returns a tuple (chien, player_hands).
+        """
         deck = deck.copy()
         np.random.shuffle(deck)
         chien = deck[:Const.CHIEN_SIZE]
@@ -94,12 +129,21 @@ class Card:
 
     @staticmethod
     def count_trumps(hand: List[int]) -> int:
+        """
+        Returns the number of trumps in the given hand.
+        """
         return sum([Card.is_trump(card) for card in hand])
 
     @staticmethod
     def count_bouts(hand: List[int]) -> int:
+        """
+        Returns the number of bouts (special trumps) in the given hand.
+        """
         return sum([card in Const.BOUTS for card in hand])
 
     @staticmethod
     def points(hand: List[int]) -> float:
+        """
+        Returns the total point value of the given hand.
+        """
         return sum([Card.value(card) for card in hand])
