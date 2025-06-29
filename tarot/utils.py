@@ -42,12 +42,12 @@ class Utils:
         """
         points = 0
         bouts = sum(1 for trick in tricks for card in trick if card in [
-                    Const.FOU, Const.PETIT, Const.MONDE])
+                    Const.FOU, Const.BID_PETIT, Const.MONDE])
         required_points = Const.POINTS_PER_BOUT[bouts]
         points += (np.sum([Card.value(card)
                            for trick in tricks for card in trick]))
         points += (np.sum([Card.value(card) for card in chien])
-                   if bid in [Const.PETIT, Const.GARDE, Const.GARDE_SANS] else 0)
+                   if bid in [Const.BID_PETIT, Const.BID_GARDE, Const.BID_GARDE_SANS] else 0)
         required = True if (points - required_points) > 0 else False
         score = 25 + abs(points - required_points)
         return score, required
@@ -79,6 +79,30 @@ class Utils:
         return score if required else -score
 
     @staticmethod
+    def select_discard_cards(hand: List[int], size=Const.CHIEN_SIZE) -> List[int]:
+        """
+        Selects cards to discard into the chien.
+        """
+        discard = [card for card in hand if not Card.is_trump(card) and Card.rank(
+            card) not in [Const.KING, Const.QUEEN, Const.KNIGHT]]
+        discard.sort(key=lambda x: Card.rank(x))
+        discard = [card for card in discard]
+        if len(discard) > size:
+            discard = discard[:Const.CHIEN_SIZE]
+        if len(discard) < size:
+            trumps = [card for card in hand if Card.is_trump(card) and
+                      Card.rank(card) not in [Const.FOU, Const.PETIT, Const.MONDE]]
+            trumps.sort(key=lambda x: Card.rank(x))
+            while len(discard) < size and trumps:
+                discard.append(trumps.pop(0))
+
+        while len(discard) < size and hand:
+            card = hand.pop(0)
+            if card not in discard:
+                discard.append(card)
+        return discard
+
+    @staticmethod
     def trick_winner(trick: List[int]) -> int:
         """
         Determines the winner of a trick based on the cards played.
@@ -97,8 +121,6 @@ class Utils:
         """
         Returns the mask slice from the tensor for the given mask name.
         """
-        if name not in Const.MASK:
-            raise ValueError(f"Mask '{name}' não existe.")
         mask_id = Const.MASK[name]
         start = 0
         size = Const.MASK_SIZE[mask_id]
@@ -107,7 +129,41 @@ class Utils:
         return tensor[start:start + size]
 
     @staticmethod
-    def get_tricks_from_tensor(known_tricks: List[int]) -> List[Tuple[int, List[int]]]:
+    def set_mask(tensor: List[int], name: str, mask: List[int]) -> List[int]:
+        """
+        Sets the mask slice in the tensor for the given mask name.
+        Names:
+        - 'known_cards': Known cards of the player
+        - 'current_trick': Current trick being played
+        - 'known_tricks': Known tricks of the player
+        - 'current_player': Current player index
+        - 'taker_player': Taker player index
+        - 'bid': Current bid of the player
+        - 'declarations': Declarations made by each team
+        - 'phase': Current phase of the game
+        """
+        mask_id = Const.MASK[name]
+        start = 0
+        size = Const.MASK_SIZE[mask_id]
+        for i in range(mask_id):
+            start += Const.MASK_SIZE[i]
+        tensor[start:start + size] = mask
+        return tensor
+
+    @staticmethod
+    def set_trick(tensor: List[int], know_tricks: int, trick: Tuple[int, List[int]]) -> List[int]:
+        """
+        Sets a trick in the known_tricks tensor.
+        The trick is a tuple of (player, trick).
+        """
+        player, _trick = trick
+        start = know_tricks * (Const.NUM_PLAYERS + 1)
+        tensor[start] = player
+        tensor[start + 1:start + 1 + Const.NUM_PLAYERS] = _trick
+        return tensor
+
+    @staticmethod
+    def get_tricks(known_tricks: List[int]) -> List[Tuple[int, List[int]]]:
         """
         Extracts the list of tricks from the known_tricks tensor.
         Returns a list of (player, trick) tuples.

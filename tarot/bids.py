@@ -14,15 +14,15 @@ class Bid:
         Returns the string name of a bid value.
         """
         bid_name = ""
-        if bid == Const.PASS:
+        if bid == Const.BID_PASS:
             bid_name = "Pass"
         elif bid == Const.PETIT:
             bid_name = "Petit"
-        elif bid == Const.GARDE:
+        elif bid == Const.BID_GARDE:
             bid_name = "Garde"
-        elif bid == Const.GARDE_SANS:
+        elif bid == Const.BID_GARDE_SANS:
             bid_name = "Garde sans le chien"
-        elif bid == Const.GARDE_CONTRE:
+        elif bid == Const.BID_GARDE_CONTRE:
             bid_name = "Garde contre le chien"
         else:
             bid_name = "Invalid bid"
@@ -33,13 +33,13 @@ class Bid:
         """
         Returns the multiplier associated with a bid value.
         """
-        if bid == Const.PASS:
+        if bid == Const.BID_PASS:
             return 0
-        if bid == Const.GARDE:
+        if bid == Const.BID_GARDE:
             return 2
-        elif bid == Const.GARDE_SANS:
+        elif bid == Const.BID_GARDE_SANS:
             return 4
-        elif bid == Const.GARDE_CONTRE:
+        elif bid == Const.BID_GARDE_CONTRE:
             return 6
         return 1
 
@@ -48,23 +48,22 @@ class Bid:
         """
         Returns a list of legal bids and their probabilities given the current bidding history.
         """
-        legal_bids = [Const.PASS]
-        bid = max(current_bids) if current_bids else Const.PASS
-        if bid == Const.PASS:
-            legal_bids += [Const.PETIT, Const.GARDE,
-                           Const.GARDE_SANS, Const.GARDE_CONTRE]
-        elif bid == Const.PETIT:
-            legal_bids += [Const.GARDE, Const.GARDE_SANS, Const.GARDE_CONTRE]
-        elif bid == Const.GARDE:
-            legal_bids += [Const.GARDE_SANS, Const.GARDE_CONTRE]
-        elif bid == Const.GARDE_SANS:
-            legal_bids += [Const.GARDE_CONTRE]
+        legal_bids = [Const.BID_PASS]
+        bid = max(current_bids) if current_bids else Const.BID_PASS
+        if bid == Const.BID_PASS:
+            legal_bids += [Const.BID_PETIT, Const.BID_GARDE,
+                           Const.BID_GARDE_SANS, Const.BID_GARDE_CONTRE]
+        elif bid == Const.BID_PETIT:
+            legal_bids += [Const.BID_GARDE,
+                           Const.BID_GARDE_SANS, Const.BID_GARDE_CONTRE]
+        elif bid == Const.BID_GARDE:
+            legal_bids += [Const.BID_GARDE_SANS, Const.BID_GARDE_CONTRE]
+        elif bid == Const.BID_GARDE_SANS:
+            legal_bids += [Const.BID_GARDE_CONTRE]
         legal_bid_outcomes = []
-        sum_bids = sum(Const.ALPHA[b] for b in legal_bids)
-        sum_all_bids = sum(Const.ALPHA[b] for b in Const.ALPHA)
+        sum_bids = sum(Const.BID_PROB[b] for b in legal_bids)
         for b in legal_bids:
-            legal_bid_outcomes.append(
-                (b, Const.ALPHA[b] * sum_all_bids / sum_bids))
+            legal_bid_outcomes.append((b, Const.BID_PROB[b] / sum_bids))
         return legal_bid_outcomes
 
     @staticmethod

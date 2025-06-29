@@ -11,21 +11,27 @@ class Action:
     Includes logic for trick actions, chien discards, excuse actions, chelem and poignee declarations.
     """
     @staticmethod
-    def legal_trick_actions(hand: List[int], trick: List[int]) -> List[int]:
+    def legal_trick_actions(legal_actions: List[int], trick: List[int], is_first: bool) -> List[int]:
         """
         Returns the list of legal cards that can be played from the hand given the current trick.
         Enforces following suit and trump rules according to Tarot rules.
+        For simplicity, if it's the first card played in the trick, the Fool (Const.FOU) is removed from the hand.
         """
+        legal_actions = legal_actions.copy()
+        if is_first:
+            if Const.FOU in legal_actions:
+                legal_actions.remove(Const.FOU)
         if len(trick) == 0:
-            return hand
+            return legal_actions
         lead_suit = Card.suit(trick[0])
-        has_lead = [card for card in hand if Card.suit(card) == lead_suit]
+        has_lead = [card for card in legal_actions if Card.suit(
+            card) == lead_suit]
         if len(has_lead) > 0:
             return has_lead
-        has_trumps = [card for card in hand if Card.is_trump(card)]
+        has_trumps = [card for card in legal_actions if Card.is_trump(card)]
         if len(has_trumps) > 0:
             return has_trumps
-        return hand
+        return legal_actions
 
     @staticmethod
     def apply_trick_action(hand: List[int], trick: List[int], action: int) -> Optional[Tuple[int, List[int]]]:
@@ -46,43 +52,46 @@ class Action:
         Returns the list of cards that can be legally discarded to the chien (dog) according to Tarot rules.
         Trumps and kings cannot be discarded.
         """
-        cards = [card for card in cards if not Card.is_trump(
-            card) and not Card.is_king(card)]
-        return cards
+        return Utils.select_discard_cards(cards)
 
     @staticmethod
-    def apply_excuse_action(hand: List[int], player: int, is_taker: bool, tricks: List[Tuple[int, List[int]]], action: int) -> Optional[int]:
+    def apply_excuse_action(hand: List[int], player: int, taker: int, trick: List[int],
+                            tricks: List[Tuple[int, List[int]]], fool: int) -> Optional[Tuple[int, List[int]]]:
         """
         Applies the Excuse (Fool) card action. Handles special rules for the Excuse, including substitution if the taker wins the trick.
         Returns the substitute card if applicable, otherwise None.
         """
-        hand = hand.copy()
-        tricks.append((player, [action]))
-        substitute_card = None
-        if action in hand:
-            hand.remove(action)
-        if is_taker:
-            taker_tricks = [trick for trick in tricks if trick[0] == player]
-            if taker_tricks:
-                for idx, trick in enumerate(taker_tricks):
-                    if any(Card.value(card) == 0.5 for card in trick[1]):
-                        substitute_card = next(
-                            card for card in trick[1] if Card.value(card) == 0.5)
-                        new_trick = (
-                            trick[0], [card for card in trick[1] if card != action])
-                        tricks[tricks.index(trick)] = new_trick
-                        break
-        return substitute_card
+        hand.remove(fool)
+        substitute_card = fool
+        player_is_taker = player == taker
+        use_tricks = [(player, _trick) for (trick_player, _trick) in tricks
+                      if (player_is_taker and trick_player == taker) or
+                      (not player_is_taker and trick_player != taker)]
+        for idx, (_, current_trick) in enumerate(use_tricks):
+            if any(Card.value(card) == 0.5 for card in current_trick):
+                substitute_card = next(card for card
+                                       in current_trick if Card.value(card) == 0.5)
+                current_trick.remove(substitute_card)
+                break
+
+        if substitute_card:
+            tricks.append((player, [fool]))
+
+        trick.append(substitute_card)
+        if len(trick) == Const.NUM_PLAYERS:
+            winner = Utils.trick_winner(trick)
+            trick_winner = (winner, trick)
+            return trick_winner
+        return None
 
     @staticmethod
     def legal_chelem_actions(hand: List[int]) -> List[Tuple[int, float]]:
         """
         Returns possible chelem (slam) declaration actions and their probabilities based on the hand.
         """
-        points = Card.points(hand) / Const.MAX_POINTS
         bouts = Card.count_bouts(hand)
-        constant = Const.BETA[bouts]
-        probability = constant * points
+        constant = Const.CHELEM_PROB[bouts]
+        probability = constant
         return [(Const.DECLARE_CHELEM, probability), (Const.DECLARE_NONE, 1.0 - probability)]
 
     @staticmethod
@@ -93,12 +102,13 @@ class Action:
         trumps = Card.count_trumps(hand)
         constant = 0.0
         if trumps < 10:
-            constant = Const.GAMMA[0]
+            constant = Const.POIGNEE_PROB[0]
         if trumps < 13:
-            constant = Const.GAMMA[10]
+            constant = Const.POIGNEE_PROB[10]
         elif trumps < 15:
-            constant = Const.GAMMA[13]
+            constant = Const.POIGNEE_PROB[13]
         else:
-            constant = Const.GAMMA[15]
-        probability = constant * trumps / Const.NUM_TRUMPS
+            constant = Const.POIGNEE_PROB[15]
+
+        probability = constant
         return [(Const.DECLARE_POIGNEE, probability), (Const.DECLARE_NONE, 1.0 - probability)]

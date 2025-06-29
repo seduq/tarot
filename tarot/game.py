@@ -25,21 +25,18 @@ class TarotGame(pyspiel.Game):
 class TarotGameState(pyspiel.State):
     def __init__(self, game: TarotGame):
         super().__init__(game)
-        self.possible_bids = self.possible_bid_combinations()
-        self.possible_declares = self.possible_declare_combinations()
         self.deck = Card.deck()
         self.chien, self.hands = Card.deal(self.deck)
         self.phase = Phase.BIDDING
         self.bids: List[int] = []
         self.taker: int = -1
-        self.taker_bid = Const.PASS
+        self.taker_bid = Const.BID_PASS
         self.current: int = 0
         self.chien_discard: List[int] = []
         self.tricks: List[Tuple[int, List[int]]] = []
         self.trick: List[int] = []
         self.known_cards: List[int] = [-1] * Const.DECK_SIZE
-        self.known_tricks: List[int] = [-1] * (Const.DECK_SIZE +
-                                               (Const.NUM_TRICKS + 1) * Const.NUM_PLAYERS)
+        self.known_tricks: List[int] = [-1] * Const.MASK_NUM_TRICKS_SIZE
         self.declared: List[Tuple[bool, bool]] = [(False, False)]
         self.chelem_declared_defenders = False
         self.poignee_declared_defenders = False
@@ -85,19 +82,17 @@ class TarotGameState(pyspiel.State):
         return self.current
 
     def legal_actions(self) -> List[int]:
-        if self.phase == Phase.END:
-            return []
+        if self.phase == Phase.BIDDING:
+            return [action for action, _ in self._legal_bidding_actions()]
         if self.phase == Phase.DECLARE:
             chelem_declared, _ = self.declared[-1]
             if not chelem_declared:
                 return [action for action, _ in self._legal_chelem_action()]
             return [action for action, _ in self._legal_poignee_action()]
-        if self.phase == Phase.BIDDING:
-            return [action for action, _ in self._legal_bidding_actions()]
         if self.phase == Phase.CHIEN:
             return self._legal_chien_discards()
         if self.phase == Phase.TRICK:
-            return Action.legal_trick_actions(self.hands[self.current], self.trick)
+            return Action.legal_trick_actions(self.hands[self.current], self.trick, len(self.tricks) == 1)
         return []
 
     def apply_action(self, action):
@@ -144,7 +139,7 @@ class TarotGameState(pyspiel.State):
         return actions
 
     def _legal_trick_actions(self):
-        return Action.legal_trick_actions(self.hands[self.current], self.trick)
+        return Action.legal_trick_actions(self.hands[self.current], self.trick, len(self.tricks) == 1)
 
     def _apply_chelem_action(self, action):
         if action == Const.DECLARE_CHELEM and self.current == self.taker:
@@ -168,10 +163,10 @@ class TarotGameState(pyspiel.State):
         self.bids.append(action)
         if len(self.bids) == Const.NUM_PLAYERS:
             self.taker, self.taker_bid = Bid.finish_bidding(self.bids)
-            if self.taker_bid == Const.PASS:
+            if self.taker_bid == Const.BID_PASS:
                 self.phase = Phase.END
                 return
-            if self.taker_bid in [Const.PETIT, Const.GARDE]:
+            if self.taker_bid in [Const.PETIT, Const.BID_GARDE]:
                 self._update_known_cards_all(self.chien, self.taker)
                 self.hands[self.taker] += self.chien
                 self.current = self.taker
@@ -194,7 +189,14 @@ class TarotGameState(pyspiel.State):
     def _apply_trick_action(self, action):
         card_played = action
         hand = self.hands[self.current]
-        trick_winner = Action.apply_trick_action(hand, self.trick, card_played)
+        trick_winner = None
+        if card_played == Const.FOU:
+            trick_winner = Action.apply_excuse_action(
+                hand, self.current, self.taker,
+                self.trick, self.tricks, card_played)
+        else:
+            trick_winner = Action.apply_trick_action(
+                hand, self.trick, card_played)
         if trick_winner:
             self.tricks.append(trick_winner)
             self.current = trick_winner[0]
@@ -241,11 +243,10 @@ class TarotGameState(pyspiel.State):
         for hand in self.hands:
             np.sort(hand)
 
-        current_trick = [-1] * (Const.NUM_PLAYERS + 1)
-        current_trick[0] = self.current
-        current_trick[1:] = self.trick.copy()
+        current_trick = [-1] * (Const.NUM_PLAYERS)
+        current_trick[:len(self.trick) - 1] = self.trick.copy()
 
-        tensor = [*self.known_cards, *self.known_tricks,
+        tensor = [*self.known_cards, current_trick, *self.known_tricks,
                   self.current, self.taker, *self.bids,
                   self.chelem_declared_taker, self.chelem_declared_defenders,
                   self.poignee_declared_taker, self.poignee_declared_defenders,
@@ -261,43 +262,49 @@ class TarotGameState(pyspiel.State):
         tensor[:Const.DECK_SIZE] = known_cards
         return tensor
 
-    def from_tensor(self, vector: List[int]) -> None:
-        def get_v(vector: List[int], start, size) -> Tuple[int, List[int]]:
-            return start + size, vector[start:start + size]
+    def from_tensor(self, tensor: List[int]) -> None:
 
-        start, known_cards = get_v(vector, 0,
-                                   Const.DECK_SIZE)
-        start, trick = get_v(vector, start,
-                             Const.NUM_PLAYERS + 1)
-        start, known_tricks = get_v(vector, start,
-                                    (Const.DECK_SIZE + Const.NUM_TRICKS))
-        start, current = get_v(vector, start, 1)
-        start, taker = get_v(vector, start, 1)
-        start, bids = get_v(vector, start, Const.NUM_PLAYERS)
-        start, chelem = get_v(vector, start, 2)
-        start, poignee = get_v(vector, start, 2)
-        start, phase = get_v(vector, start, 1)
+        known_cards = Utils.get_mask(tensor, 'known_cards',)
+        current_trick = Utils.get_mask(tensor, 'current_trick')
+        known_tricks = Utils.get_mask(tensor, 'known_tricks')
+        current_player = Utils.get_mask(tensor, 'current_player')
+        taker_player = Utils.get_mask(tensor, 'taker_player')
+        bids = Utils.get_mask(tensor, 'bid')
+        declarations = Utils.get_mask(tensor, 'declarations')
+        phase = Utils.get_mask(tensor, 'phase')
 
-        self.chelem_declared_taker = bool(chelem[0])
-        self.chelem_declared_defenders = bool(chelem[1])
-        self.poignee_declared_taker = bool(poignee[0])
-        self.poignee_declared_defenders = bool(poignee[1])
-        self.phase = Const.Phase(phase[0])
         self.known_cards = known_cards
+        self.trick = [t for t in current_trick if t != -1]
         self.known_tricks = known_tricks
-        self.current = current[0]
-        self.taker = taker[0]
+        self.tricks = Utils.get_tricks(known_tricks)
+        self.current = current_player[0]
+        self.taker = taker_player[0]
         self.bids = bids
-        self.trick = trick
-        self.tricks = Utils.get_tricks_from_tensor(known_tricks)
+        self.chelem_declared_taker = bool(declarations[0])
+        self.chelem_declared_defenders = bool(declarations[1])
+        self.poignee_declared_taker = bool(declarations[2])
+        self.poignee_declared_defenders = bool(declarations[3])
+        self.phase = Const.Phase(phase[0])
+
+    def clone(self):
+        clone = TarotGameState(self.game)
+        clone.from_tensor(self.tensor())
+        clone.hands = [hand.copy() for hand in self.hands]
+        clone.chien = self.chien.copy()
+        clone.chien_discard = self.chien_discard.copy()
+        clone.declared = self.declared.copy()
+        return clone
 
     def action_to_string(self, action: int) -> str:
         if self.phase == Phase.BIDDING:
             return Bid.name(action)
-        elif self.phase == Phase.CHELEM:
-            return "Declare Chelem" if action == Const.DECLARE_CHELEM else "No Chelem Declared"
-        elif self.phase == Phase.POIGNEE:
-            return "Declare Poignee" if action == Const.DECLARE_POIGNEE else "No Poignee Declared"
+        elif self.phase == Phase.DECLARE:
+            if action == Const.DECLARE_NONE:
+                return "No Declaration"
+            if action == Const.DECLARE_CHELEM:
+                return "Declare Chelem"
+            if action == Const.DECLARE_POIGNEE:
+                return "Declare Poignee"
         elif self.phase == Phase.CHIEN:
             return Card.name(action)
         elif self.phase == Phase.TRICK:
@@ -317,7 +324,7 @@ class TarotGameState(pyspiel.State):
             string += f"Bid: {Bid.name(state.bids[i])}\n" if len(
                 state.bids) > i else "Bid: N/A\n"
             string += f"Hand [{len(state.hands[i])}]: {", ".join([Card.name(card) for card in state.hands[i]])}\n"
-            string += f"Tricks [{len(state.hands[i])}]: {', '.join([Card.name(card) for player, tricks in state.tricks if player == i for card in tricks])}\n"
+            string += f"Tricks [{len([trick for (p, trick) in state.tricks if p == i])}]: {', '.join([Card.name(card) for player, tricks in state.tricks if player == i for card in tricks])}\n"
         string += "=" * 10 + "\n"
         string += f"Taker Declared Chelem: {state.chelem_declared_taker}\n"
         string += f"Taker Declared Poignee: {state.poignee_declared_taker}\n"
@@ -330,7 +337,7 @@ class TarotGameState(pyspiel.State):
 
     @staticmethod
     def possible_bid_combinations() -> List[List[int]]:
-        bid_passes: List[List[int]] = [[Const.PASS]
+        bid_passes: List[List[int]] = [[Const.BID_PASS]
                                        * r for r in range(Const.NUM_PLAYERS)]
         unique_bids = []
         for _pass in bid_passes:
