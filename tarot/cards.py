@@ -50,7 +50,7 @@ class Card:
         """
         rank = (card_idx % 14 + 1)
         suit = (card_idx // 14 + 1)
-        if suit == Const.TRUMP:
+        if card_idx >= (Const.DECK_SIZE - Const.NUM_TRUMPS):
             return (card_idx - (Const.DECK_SIZE - Const.NUM_TRUMPS)) + 100 * Const.TRUMP
         return suit * 100 + rank
 
@@ -86,7 +86,7 @@ class Card:
         """
         rank = Card.rank(card)
         if Card.is_trump(card):
-            if (rank == Const.PETIT or rank == Const.MONDE or rank == Const.FOU):
+            if (card == Const.PETIT or card == Const.MONDE or card == Const.FOU):
                 return 4.5
             else:
                 return 0.5

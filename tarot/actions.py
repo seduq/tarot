@@ -37,13 +37,10 @@ class Action:
     def apply_trick_action(hand: List[int], trick: List[int], action: int) -> Optional[Tuple[int, List[int]]]:
         """
         Applies the given action (card play) to the hand and trick. Returns the winner and trick if the trick is complete, otherwise None.
-        Adds a check to avoid removing a card not in hand, for debugging and robustness.
         """
-        trick_winner = None
         if action not in hand:
-            print(
-                f"[ERROR] Tried to remove action {action} from hand {hand}, but it's not there!")
-            raise ValueError(f"Action {action} not in hand {hand}")
+            raise ValueError(f"Action {action} is not in hand: {hand}")
+        trick_winner = None
         hand.remove(action)
         trick.append(action)
         if len(trick) == Const.NUM_PLAYERS:

@@ -16,7 +16,7 @@ class Bid:
         bid_name = ""
         if bid == Const.BID_PASS:
             bid_name = "Pass"
-        elif bid == Const.PETIT:
+        elif bid == Const.BID_PETIT:
             bid_name = "Petit"
         elif bid == Const.BID_GARDE:
             bid_name = "Garde"

@@ -41,14 +41,16 @@ class Utils:
         Returns the score and a boolean indicating if the bid was met.
         """
         points = 0
-        bouts = sum(1 for trick in tricks for card in trick if card in [
+        bouts = (card for trick in tricks for card in trick if card in [
                     Const.FOU, Const.BID_PETIT, Const.MONDE])
+        bouts = set(bouts)  # Remove duplicates
+        bouts = len(bouts)
         required_points = Const.POINTS_PER_BOUT[bouts]
-        points += (np.sum([Card.value(card)
+        points += (sum([Card.value(card)
                            for trick in tricks for card in trick]))
-        points += (np.sum([Card.value(card) for card in chien])
+        points += (sum([Card.value(card) for card in chien])
                    if bid in [Const.BID_PETIT, Const.BID_GARDE, Const.BID_GARDE_SANS] else 0)
-        required = True if (points - required_points) > 0 else False
+        required = True if (points - required_points) >= 0 else False
         score = 25 + abs(points - required_points)
         return score, required
 
@@ -121,9 +123,9 @@ class Utils:
         """
         Get the mask slice in the tensor for the given mask name.
         Names:
-        - 'known_cards': Known cards of the player (deck size)
+        - 'played_cards': Played cards, each index is either player id or -1 (deck size)
         - 'current_trick': Current trick being played (1 + number of players)
-        - 'known_tricks': Known tricks of the player (1 + number of players) * (number of tricks + 1)
+        - 'trick_history': Known tricks of the player (1 + number of players) * (number of tricks + 1)
         - 'current_player': Current player index
         - 'taker_player': Taker player index
         - 'bid': Current bid of the player
@@ -142,9 +144,9 @@ class Utils:
         """
         Sets the mask slice in the tensor for the given mask name.
         Names:
-        - 'known_cards': Known cards of the player
+        - 'played_cards': Played cards, each index is either player id or -1
         - 'current_trick': Current trick being played
-        - 'known_tricks': Known tricks of the player
+        - 'trick_history': Known tricks of the player
         - 'current_player': Current player index
         - 'taker_player': Taker player index
         - 'bid': Current bid of the player
@@ -162,7 +164,7 @@ class Utils:
     @staticmethod
     def set_trick(tensor: List[int], know_tricks: int, trick: Tuple[int, List[int]]) -> List[int]:
         """
-        Sets a trick in the known_tricks tensor.
+        Sets a trick in the trick_history tensor.
         The trick is a tuple of (player, trick).
         """
         player, _trick = trick
@@ -172,18 +174,18 @@ class Utils:
         return tensor
 
     @staticmethod
-    def get_tricks(known_tricks: List[int]) -> List[Tuple[int, List[int]]]:
+    def get_tricks(trick_history: List[int]) -> List[Tuple[int, List[int]]]:
         """
-        Extracts the list of tricks from the known_tricks tensor.
+        Extracts the list of tricks from the trick_history tensor.
         Returns a list of (player, trick) tuples.
         """
         tricks: List[Tuple[int, List[int]]] = []
         for i in range(Const.NUM_TRICKS):
             idx = i * (Const.NUM_PLAYERS + 1)
-            current_player = known_tricks[idx]
+            current_player = trick_history[idx]
             if (current_player == - 1):
                 break
             start = idx + 1
-            current_trick = known_tricks[start:start + Const.NUM_PLAYERS]
+            current_trick = trick_history[start:start + Const.NUM_PLAYERS]
             tricks.append((current_player, current_trick))
         return tricks

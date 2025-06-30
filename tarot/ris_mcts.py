@@ -32,89 +32,151 @@ class RIS_MCTS:
         self.tree: Dict[str, RIS_MCTS_Node] = {}
         self.exploration_constant: float = math.sqrt(2)
         self.num_players: int = Const.NUM_PLAYERS
+        self.invalid_action_count: int = 0
 
-    def search(self, initial_state: TarotGameState, player: int, iterations: int = 1000) -> Optional[int]:
+    def search(self, initial_state: TarotGameState, player: int, iterations: int = 100, verbose: bool = False) -> Optional[int]:
         """
         Run RIS-MCTS from an initial state for a given player.
         Returns the best action found after the given number of iterations.
-        If the state is not in the trick phase, returns the default legal actions.
+        If the state is not in the trick phase, returns a random legal action.
+        If verbose is True, prints debug information at each crucial step.
         """
         if initial_state.phase != Phase.TRICK:
-            legal_actions = self._get_legal_actions(initial_state)
+            legal_actions = initial_state.legal_actions()
+            if verbose:
+                print("[RIS-MCTS] Not in trick phase. Returning random legal action.")
             return random.choice(legal_actions) if legal_actions else None
-        root_key = self._state_to_key(initial_state, player)
+        root_key = str(initial_state.tensor_player(player))
         if root_key not in self.tree:
             self.tree[root_key] = RIS_MCTS_Node(player)
+            if verbose:
+                print(f"[RIS-MCTS] Created root node for key: {root_key}")
         root_node = self.tree[root_key]
         best_action_votes = {}
-        for _ in range(iterations):
+        for it in range(iterations):
+            if verbose:
+                print(f"\n[Iteration {it+1}/{iterations}] Starting new MCTS iteration.")
+            # Determinization: sample hidden information for opponents
             current_state = self._determinize_state(initial_state, player)
+            if verbose:
+                print("[Determinization] Sampled determinization for player", player)
+                for p in range(Const.NUM_PLAYERS):
+                    print(f"Player {p} hand: {sorted(current_state.hands[p])} Initial hand: {sorted(initial_state.hands[p])}")
             current_player = player
-            current_key = root_key
             node = root_node
             path = [node]
-            # Selection
+            # --- SELECTION ---
+            if verbose:
+                print("[Selection] Starting selection phase.")
             while node.children:
-                legal_actions = self._get_legal_actions(current_state)
-                unexplored = [
-                    a for a in legal_actions if a not in node.children]
+                legal_actions = current_state.legal_actions()
+                unexplored = [a for a in legal_actions if a not in node.children]
                 if unexplored:
+                    if verbose:
+                        print(f"[Selection] Found unexplored actions: {unexplored}")
                     break
-                best_action = self._select_best_child(node)
-                node = node.children[best_action]
-                current_key = self._state_to_key(current_state, current_player)
-                path.append(node)
-                current_state = self._apply_action(
-                    current_state.clone(), best_action)
-                current_player = current_state.current_player()
-            # Expansion
-            if not self._is_terminal(current_state):
-                legal_actions = self._get_legal_actions(current_state)
-                unexplored = [
-                    a for a in legal_actions if a not in node.children]
+                # Select best child (UCB1)
+                best_score = float('-inf')
+                best_action = None
+                for action, child in node.children.items():
+                    if child.visits == 0:
+                        best_action = action
+                        if verbose:
+                            print(f"[Selection] Child for action {action} has 0 visits. Selecting immediately.")
+                        break
+                    exploitation = child.wins / child.visits
+                    exploration = self.exploration_constant * math.sqrt(math.log(node.visits) / child.visits)
+                    ucb1_score = exploitation + exploration
+                    if verbose:
+                        print(f"[Selection] Action {action}: exploitation={exploitation:.3f}, exploration={exploration:.3f}, UCB1={ucb1_score:.3f}")
+                    if ucb1_score > best_score:
+                        best_score = ucb1_score
+                        best_action = action
+                if best_action is None:
+                    raise ValueError("No best action found, check the tree structure.")
+                
+                if best_action in current_state.legal_actions():
+                    node = node.children[best_action]
+                    path.append(node)
+                    current_state.apply_action(best_action)
+                    current_player = current_state.current_player()
+                    if verbose:
+                        print(f"[Selection] Selected action {best_action}, moved to player {current_player}.")
+                else:
+                    if verbose:
+                        print(f"[Selection] Best action {best_action} is not legal in the current state. Stopping selection.")
+                        self.invalid_action_count += 1
+                        node.children.pop(best_action, None)  # Remove invalid child
+                    break
+            # --- EXPANSION ---
+            if not current_state.is_terminal():
+                legal_actions = current_state.legal_actions()
+                unexplored = [a for a in legal_actions if a not in node.children]
                 if unexplored:
                     action = random.choice(unexplored)
-                    new_state = self._apply_action(
-                        current_state.clone(), action)
+                    new_state = current_state.clone()
+                    new_state.apply_action(action)
                     next_player = new_state.current_player()
-                    new_node = RIS_MCTS_Node(
-                        next_player, parent=node, action=action)
+                    new_node = RIS_MCTS_Node(next_player, parent=node, action=action)
                     node.children[action] = new_node
-                    key = self._state_to_key(new_state, current_player)
+                    key = str(new_state.tensor_player(next_player))
                     self.tree[key] = new_node
                     path.append(new_node)
                     current_state = new_state
                     current_player = next_player
                     node = new_node
-            # Simulation
+                    if verbose:
+                        print(f"[Expansion] Expanded with action {action}, created new node for player {next_player}.")
+            # --- SIMULATION ---
             simulation_state = current_state.clone()
-            while not self._is_terminal(simulation_state):
-                legal_actions = self._get_legal_actions(simulation_state)
+            if verbose:
+                print("[Simulation] Starting simulation from expanded/leaf node.")
+            sim_steps = 0
+            while not simulation_state.is_terminal():
+                legal_actions = simulation_state.legal_actions()
                 if not legal_actions:
+                    if verbose:
+                        print("[Simulation] No legal actions left, breaking simulation loop.")
                     break
                 action = random.choice(legal_actions)
-                simulation_state = self._apply_action(
-                    simulation_state.clone(), action)
-            # Backpropagation
-            result = self._evaluate_terminal_state(simulation_state, player)
+                simulation_state.apply_action(action)
+                sim_steps += 1
+            if verbose:
+                print(f"[Simulation] Simulation finished after {sim_steps} steps. Terminal state reached.")
+            # --- BACKPROPAGATION ---
+            returns = simulation_state.returns()
+            if len(returns) > player:
+                result = 0 if returns[player] < 0 else 1
+            else:
+                result = 0.5
+            if verbose:
+                print(f"[Backpropagation] Simulation result for player {player}: {returns[player] if len(returns) > player else 'N/A'} -> result={result}")
             for n in reversed(path):
                 n.visits += 1
                 if n.player == player:
                     n.wins += result
                 else:
                     n.wins += (1.0 - result)
-            # Voting
+                if verbose:
+                    print(f"[Backpropagation] Node for player {n.player}, visits={n.visits}, wins={n.wins:.2f}")
+            # --- VOTING ---
             if root_node.children:
                 best_child_action = max(
                     root_node.children.keys(),
                     key=lambda a: root_node.children[a].visits
                 )
-                best_action_votes[best_child_action] = best_action_votes.get(
-                    best_child_action, 0) + 1
+                best_action_votes[best_child_action] = best_action_votes.get(best_child_action, 0) + 1
+            if verbose:
+                print(f"[Voting] Current best action votes: {best_action_votes}")
         if not best_action_votes:
-            legal_actions = self._get_legal_actions(initial_state)
+            legal_actions = initial_state.legal_actions()
+            if verbose:
+                print("[RIS-MCTS] No best action found by voting. Returning random legal action.")
             return random.choice(legal_actions) if legal_actions else None
-        return max(best_action_votes.keys(), key=lambda a: best_action_votes[a])
+        best = max(best_action_votes.keys(), key=lambda a: best_action_votes[a])
+        if verbose:
+            print(f"[RIS-MCTS] Best action after {iterations} iterations: {best} (votes: {best_action_votes[best]})")
+        return best
 
     def _determinize_state(self, state: TarotGameState, player: int) -> TarotGameState:
         """
@@ -122,79 +184,35 @@ class RIS_MCTS:
         """
         if state.current_player() < 0:
             return state
-        determinized_state = state.tensor_player(player)
-        know_cards = Utils.get_mask(determinized_state, 'known_cards')
-        unknown_cards = [card for card,
-                         _player in enumerate(know_cards) if _player < 0]
         new_state = state.clone()
-        for player_id in range(Const.NUM_PLAYERS):
-            if player_id != player:
-                current_hand_size = Const.HAND_SIZE - \
-                    len([card for card in know_cards if card == player_id])
-                if current_hand_size > 0 and len(unknown_cards) >= current_hand_size:
-                    sampled_hand = random.sample(
-                        unknown_cards, current_hand_size)
-                    hand = [Card.from_idx(card) for card in sampled_hand]
-                    new_state.hands[player_id] = hand
-                    unknown_cards = [
-                        c for c in unknown_cards if c not in sampled_hand]
+        # Get the player's view of the game
+        player_view = state.tensor_player(player)
+        played_cards_mask = Utils.get_mask(player_view, 'played_cards')
+
+        # Identify all cards that are not in the current player's hand and have not been played yet.
+        unknown_cards_indices = [
+            i for i, p in enumerate(played_cards_mask) if p == -1
+        ]
+        random.shuffle(unknown_cards_indices)
+
+        for p_id in range(Const.NUM_PLAYERS):
+            if p_id != player:
+                # Get cards already played by this opponent (and known to the current player)
+                opponent_played_cards = [
+                    Card.from_idx(i) for i, p in enumerate(played_cards_mask) if p == p_id
+                    or (p == Const.CHIEN_ID + 1 and state.taker == p_id)
+                ]
+                
+                # Determine how many cards we need to sample for this opponent's hand
+                target_hand_size = Const.HAND_SIZE - len(opponent_played_cards)
+                
+                # We only need to sample if the hand is not complete
+                if target_hand_size > 0:
+                    if len(unknown_cards_indices) >= target_hand_size:
+                        sampled_indices = unknown_cards_indices[:target_hand_size]
+                        unknown_cards_indices = unknown_cards_indices[target_hand_size:]
+                        
+                        sampled_cards = [Card.from_idx(i) for i in sampled_indices]
+                        new_state.hands[p_id] = sampled_cards
+
         return new_state
-
-    def _state_to_key(self, state: TarotGameState, player: int) -> str:
-        """
-        Generate a hashable key for the state, considering the player's view.
-        """
-        if player == state.current_player():
-            tensor = state.tensor_player(player)
-        else:
-            tensor = state.tensor()
-        return str(tensor)
-
-    def _get_legal_actions(self, state: TarotGameState) -> List[int]:
-        """
-        Return the legal actions for the state.
-        """
-        return state.legal_actions()
-
-    def _apply_action(self, state: TarotGameState, action: int) -> TarotGameState:
-        """
-        Apply an action to the state (modifies in-place and returns the state).
-        """
-        state.apply_action(action)
-        return state
-
-    def _is_terminal(self, state: TarotGameState) -> bool:
-        """
-        Check if the state is terminal.
-        """
-        return state.is_terminal()
-
-    def _evaluate_terminal_state(self, state: TarotGameState, original_player: int) -> float:
-        """
-        Evaluate the terminal state from the original player's perspective.
-        Returns 1 for win, 0 for loss, 0.5 for neutral/draw.
-        """
-        returns = state.returns()
-        if len(returns) > original_player:
-            return 0 if returns[original_player] < 0 else 1
-        return 0.5
-
-    def _select_best_child(self, node: RIS_MCTS_Node) -> int:
-        """
-        Select the best child of a node using the UCB1 criterion.
-        """
-        best_score = float('-inf')
-        best_action = None
-        for action, child in node.children.items():
-            if child.visits == 0:
-                return action  # Prioritize unvisited children
-            exploitation = child.wins / child.visits
-            exploration = self.exploration_constant * \
-                math.sqrt(math.log(node.visits) / child.visits)
-            ucb1_score = exploitation + exploration
-            if ucb1_score > best_score:
-                best_score = ucb1_score
-                best_action = action
-        if best_action is None:
-            raise ValueError("No best action found, check the tree structure.")
-        return int(best_action)

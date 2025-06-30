@@ -37,8 +37,8 @@ class TarotGameState(pyspiel.State):
         self.chien_discard: List[int] = []
         self.tricks: List[Tuple[int, List[int]]] = []
         self.trick: List[int] = []
-        self.known_cards: List[int] = [-1] * Const.DECK_SIZE
-        self.known_tricks: List[int] = [-1] * Const.MASK_NUM_TRICKS_SIZE
+        self.played_cards: List[int] = [-1] * Const.DECK_SIZE
+        self.trick_history: List[int] = [-1] * (Const.MASK_NUM_TRICKS_SIZE)
         self.declared: List[Tuple[bool, bool]] = [(False, False)]
         self.chelem_declared_defenders = False
         self.poignee_declared_defenders = False
@@ -58,20 +58,20 @@ class TarotGameState(pyspiel.State):
     def is_taker(self) -> bool:
         return self.current == self.taker
 
-    def _update_known_cards(self, card: int, player: int):
+    def _update_played_card(self, card: int, player: int):
         card_idx = Card.to_idx(card)
-        self.known_cards[card_idx] = player
+        self.played_cards[card_idx] = player
 
-    def _update_known_cards_all(self, cards: List[int], player: int):
+    def _update_played_cards(self, cards: List[int], player: int):
         for card in list(cards):
-            self._update_known_cards(card, player)
+            self._update_played_card(card, player)
 
-    def _update_known_tricks(self, cards: List[int], player: int):
+    def _update_trick_history(self, cards: List[int], player: int):
         n_tricks = len(self.tricks) - 1
         idx = n_tricks * (Const.NUM_PLAYERS + 1)
-        self.known_tricks[idx] = player
+        self.trick_history[idx] = player
         for i, card in enumerate(list(cards)):
-            self.known_tricks[idx + i + 1] = card
+            self.trick_history[idx + i + 1] = card
 
     def current_player(self):
         if self.phase == Phase.BIDDING:
@@ -159,7 +159,7 @@ class TarotGameState(pyspiel.State):
         if action == Const.DECLARE_POIGNEE:
             trumps = [card for card in self.hands[self.current]
                       if Card.is_trump(card)]
-            self._update_known_cards_all(trumps, self.current)
+            self._update_played_cards(trumps, self.current)
         self.declared[-1] = (True, True)
 
     def _apply_bidding_action(self, action):
@@ -170,7 +170,7 @@ class TarotGameState(pyspiel.State):
                 self.phase = Phase.END
                 return
             if self.taker_bid in [Const.PETIT, Const.BID_GARDE]:
-                self._update_known_cards_all(self.chien, self.taker)
+                self._update_played_cards(self.chien, (Const.CHIEN_ID + 1))
                 self.hands[self.taker] += self.chien
                 self.current = self.taker
                 self.phase = Phase.CHIEN
@@ -182,7 +182,7 @@ class TarotGameState(pyspiel.State):
         self.chien_discard.append(action)
         self.hands[self.taker].remove(action)
         if len(self.chien_discard) == Const.CHIEN_SIZE:
-            self._update_known_cards_all(
+            self._update_played_cards(
                 self.chien_discard, Const.CHIEN_ID)
             self.chien = self.chien_discard.copy()
             self.chien_discard = []
@@ -203,9 +203,9 @@ class TarotGameState(pyspiel.State):
         if trick_winner:
             self.tricks.append(trick_winner)
             self.current = trick_winner[0]
-            self._update_known_tricks(self.trick, self.current)
+            self._update_trick_history(self.trick, self.current)
             self.trick = []
-        self._update_known_cards(card_played, self.current)
+        self._update_played_card(card_played, self.current)
         if all(len(h) == 0 for h in self.hands):
             self.phase = Phase.END
 
@@ -237,7 +237,7 @@ class TarotGameState(pyspiel.State):
         tricks = [trick for player,
                   trick in self.tricks if player == self.taker]
         score, board = Utils.board_score(
-            bid=self.taker_bid, taker=self.taker,
+            bid=self.bids[self.taker], taker=self.taker,
             tricks=tricks, chien=self.chien,
             chelem=self.chelem_declared_taker,
             poignee=self.poignee_declared_taker, petit=petit)
@@ -253,7 +253,7 @@ class TarotGameState(pyspiel.State):
             for i, card in enumerate(self.trick):
                 current_trick[i] = card
 
-        tensor = [*self.known_cards, *current_trick, *self.known_tricks,
+        tensor = [*self.played_cards, *current_trick, *self.trick_history,
                   self.current, self.taker, *self.bids,
                   self.chelem_declared_taker, self.chelem_declared_defenders,
                   self.poignee_declared_taker, self.poignee_declared_defenders,
@@ -262,28 +262,28 @@ class TarotGameState(pyspiel.State):
 
     def tensor_player(self, player: int) -> List[int]:
         tensor = self.tensor()
-        known_cards = self.known_cards.copy()
+        played_cards = self.played_cards.copy()
         for hand in self.hands[player]:
             card_idx = Card.to_idx(hand)
-            known_cards[card_idx] = player
-        tensor[:Const.DECK_SIZE] = known_cards
+            played_cards[card_idx] = player
+        tensor[:Const.DECK_SIZE] = played_cards
         return tensor
 
     def from_tensor(self, tensor: List[int]) -> None:
 
-        known_cards = Utils.get_mask(tensor, 'known_cards',)
+        played_cards = Utils.get_mask(tensor, 'played_cards',)
         current_trick = Utils.get_mask(tensor, 'current_trick')
-        known_tricks = Utils.get_mask(tensor, 'known_tricks')
+        trick_history = Utils.get_mask(tensor, 'trick_history')
         current_player = Utils.get_mask(tensor, 'current_player')
         taker_player = Utils.get_mask(tensor, 'taker_player')
         bids = Utils.get_mask(tensor, 'bid')
         declarations = Utils.get_mask(tensor, 'declarations')
         phase = Utils.get_mask(tensor, 'phase')
 
-        self.known_cards = known_cards
+        self.played_cards = played_cards
         self.trick = [t for t in current_trick if t != -1]
-        self.known_tricks = known_tricks
-        self.tricks = Utils.get_tricks(known_tricks)
+        self.trick_history = trick_history
+        self.tricks = Utils.get_tricks(trick_history)
         self.current = current_player[0]
         self.taker = taker_player[0]
         self.bids = bids
@@ -338,8 +338,8 @@ class TarotGameState(pyspiel.State):
         string += f"Defenders Declared Chelem: {state.chelem_declared_defenders}\n"
         string += f"Defenders Declared Poignee: {state.poignee_declared_defenders}\n"
         string += "=" * 10 + "\n"
-        string += f"Known Cards: {', '.join([Card.name(card) if card != -1 else 'N/A' for card in state.known_cards])}\n"
-        string += f"Known Tricks: {', '.join([Card.name(card) if card != -1 else 'N/A' for card in state.known_tricks])}\n"
+        string += f"Player Cards: {', '.join([Card.name(card) if card != -1 else 'N/A' for card in state.played_cards])}\n"
+        string += f"Trick History: {', '.join([Card.name(card) if card != -1 else 'N/A' for card in state.trick_history])}\n"
         return string
 
     @staticmethod
