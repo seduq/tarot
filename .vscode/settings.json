@@ -96,6 +96,7 @@
     "variant": "cpp"
   },
   "cSpell.words": [
+    "absl",
     "addopts",
     "backpropagate",
     "backpropagation",
@@ -134,6 +135,7 @@
     "repr",
     "retropropagação",
     "Retropropagação",
+    "RISMCTS",
     "scipy",
     "setuptools",
     "testpaths"

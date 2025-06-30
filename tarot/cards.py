@@ -48,12 +48,11 @@ class Card:
         """
         Converts a card index to its integer representation.
         """
-        if (card_idx + 1) >= Const.DECK_SIZE - Const.NUM_TRUMPS:
+        rank = (card_idx % 14 + 1)
+        suit = (card_idx // 14 + 1)
+        if suit == Const.TRUMP:
             return (card_idx - (Const.DECK_SIZE - Const.NUM_TRUMPS)) + 100 * Const.TRUMP
-        card_idx -= Const.NUM_TRUMPS
-        rank = card_idx % 14
-        suit = card_idx - rank
-        return (suit + 1) * 100 + (rank + 1)
+        return suit * 100 + rank
 
     @staticmethod
     def to_idx(card_idx: int) -> int:
@@ -120,7 +119,7 @@ class Card:
         Returns a tuple (chien, player_hands).
         """
         deck = deck.copy()
-        np.random.shuffle(deck)
+        random.shuffle(deck)
         chien = deck[:Const.CHIEN_SIZE]
         player_hands = [
             deck[(Const.CHIEN_SIZE + i * Const.HAND_SIZE):(Const.CHIEN_SIZE + (i+1)*Const.HAND_SIZE)]

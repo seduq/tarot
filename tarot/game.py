@@ -1,4 +1,5 @@
-from typing import List, Set, Tuple
+from itertools import combinations
+from typing import List, Tuple
 import numpy as np
 from .actions import Action
 from .bids import Bid
@@ -6,8 +7,9 @@ from .cards import Card
 from .utils import Utils
 from . import constants as Const
 from .constants import Phase
+
+
 import pyspiel
-from itertools import product, combinations
 
 
 class TarotGame(pyspiel.Game):
@@ -42,6 +44,7 @@ class TarotGameState(pyspiel.State):
         self.poignee_declared_defenders = False
         self.chelem_declared_taker = False
         self.poignee_declared_taker = False
+        self.game = game
 
     def next_player(self, current: int) -> int:
         if self.phase == Phase.DECLARE:
@@ -225,6 +228,8 @@ class TarotGameState(pyspiel.State):
         return []
 
     def returns(self):
+        if self.tricks == []:
+            return [0.25] * Const.NUM_PLAYERS
         last_trick_winner, last_trick = self.tricks[-1]
         petit = False
         if Const.PETIT in last_trick and last_trick_winner == self.taker:
@@ -244,9 +249,11 @@ class TarotGameState(pyspiel.State):
             np.sort(hand)
 
         current_trick = [-1] * (Const.NUM_PLAYERS)
-        current_trick[:len(self.trick) - 1] = self.trick.copy()
+        if self.trick:
+            for i, card in enumerate(self.trick):
+                current_trick[i] = card
 
-        tensor = [*self.known_cards, current_trick, *self.known_tricks,
+        tensor = [*self.known_cards, *current_trick, *self.known_tricks,
                   self.current, self.taker, *self.bids,
                   self.chelem_declared_taker, self.chelem_declared_defenders,
                   self.poignee_declared_taker, self.poignee_declared_defenders,

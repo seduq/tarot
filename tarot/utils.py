@@ -119,7 +119,16 @@ class Utils:
     @staticmethod
     def get_mask(tensor: List[int], name: str) -> List[int]:
         """
-        Returns the mask slice from the tensor for the given mask name.
+        Get the mask slice in the tensor for the given mask name.
+        Names:
+        - 'known_cards': Known cards of the player (deck size)
+        - 'current_trick': Current trick being played (1 + number of players)
+        - 'known_tricks': Known tricks of the player (1 + number of players) * (number of tricks + 1)
+        - 'current_player': Current player index
+        - 'taker_player': Taker player index
+        - 'bid': Current bid of the player
+        - 'declarations': Declarations made by each team (2 for each team)
+        - 'phase': Current phase of the game
         """
         mask_id = Const.MASK[name]
         start = 0

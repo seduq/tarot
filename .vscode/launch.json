@@ -5,10 +5,17 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Main",
+            "name": "Random Example",
             "type": "debugpy",
             "request": "launch",
-            "program": "main.py",
+            "program": "random_example.py",
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "RIS-MCTS Example",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "ris_mcts_example.py",
             "console": "integratedTerminal"
         },
         {

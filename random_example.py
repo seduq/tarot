@@ -1,7 +1,7 @@
 from absl import app
 from tarot import TarotGameState
-import numpy as np
 import pyspiel
+import random
 
 
 SEED = 7264828
@@ -10,7 +10,7 @@ SEED = 7264828
 def random_game(strategy=['random', 'random', 'random', 'random'], verbose=True):
     game = pyspiel.load_game('french_tarot')
     state = game.new_initial_state()
-    np.random.seed(SEED)
+    random.seed(SEED)
 
     legal_actions_count = 0
     chance_outcomes_count = 0
@@ -38,10 +38,10 @@ def random_game(strategy=['random', 'random', 'random', 'random'], verbose=True)
         if state.is_chance_node():
             if verbose:
                 print(f"Chances outcome: {state.chance_outcomes()}")
-            outcomes, probs = zip(*state.chance_outcomes())
-            action = np.random.choice(outcomes, p=probs)
-            action = int(action)
-            chance_outcomes_count += len(outcomes)
+            # Handle chance nodes (bidding, declarations)
+            outcomes = state.chance_outcomes()
+            actions, probs = zip(*outcomes)
+            action = random.choices(actions, weights=probs)[0]
         else:
             if verbose:
                 print(f"Legal actions: {state.legal_actions()}")
@@ -50,12 +50,12 @@ def random_game(strategy=['random', 'random', 'random', 'random'], verbose=True)
                 break
             legal_actions = state.legal_actions()
             if strategy[state.current] == 'random':
-                action = np.random.choice(legal_actions)
+                action = random.choice(legal_actions)
             elif strategy[state.current] == 'min':
                 action = min(legal_actions)
             elif strategy[state.current] == 'max':
                 action = max(legal_actions)
-            action = np.random.choice(legal_actions)
+            action = random.choice(legal_actions)
             action = int(action)
             legal_actions_count += len(state.legal_actions())
 
@@ -80,7 +80,7 @@ def random_game(strategy=['random', 'random', 'random', 'random'], verbose=True)
 def main(_):
     won = 0
     for i in range(100000):
-        win, _, _, _ = random_game(verbose=False)
+        win, _, _, _ = random_game(verbose=True)
         won += win
         if i % 1000 == 0:
             print(f"Game {i}: Won {win} games so far")
