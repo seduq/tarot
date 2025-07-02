@@ -1,6 +1,4 @@
-from absl import app
-from tarot import TarotGameState
-import pyspiel
+from tarot import Tarot
 import random
 
 
@@ -8,8 +6,7 @@ SEED = 7264828
 
 
 def random_game(strategy=['random', 'random', 'random', 'random'], verbose=True):
-    game = pyspiel.load_game('french_tarot')
-    state = game.new_initial_state()
+    state = Tarot()
     random.seed(SEED)
 
     legal_actions_count = 0
@@ -17,22 +14,13 @@ def random_game(strategy=['random', 'random', 'random', 'random'], verbose=True)
     game_length = 0
     win = 0
     if verbose:
-        print(TarotGameState.pretty_print(state))
+        print(state.pretty_print())
         print("=" * 20)
-    for i in range(100):
+    while not state.is_terminal():
         game_length += 1
-        if (state.is_terminal()):
-            if verbose:
-                print("--" * 10)
-                print(f"Results: {state.returns()}")
-                print("Game over")
-            result = state.returns()
-            if result[state.taker] > 0:
-                win += 1
-            break
         if verbose:
             print("--" * 10)
-            print(f"Iteration: {i + 1}")
+            print(f"Iteration: {game_length}")
             print(f"Current player: {state.current}")
             print(f"Current phase: {state.phase}")
         if state.is_chance_node():
@@ -63,12 +51,14 @@ def random_game(strategy=['random', 'random', 'random', 'random'], verbose=True)
             print(
                 f'Taking action {action} {state.action_to_string(action)}')
         state.apply_action(action)
+        state.next()
 
     avg_legal_actions = legal_actions_count / game_length
     avg_chance_outcomes = chance_outcomes_count / game_length
     if verbose:
         print("=" * 20)
-        print(TarotGameState.pretty_print(state))
+        print(state.pretty_print())
+        print(f"Results: {state.returns()}")
         print(f"Game length: {game_length}")
         print(f"Legal actions count: {legal_actions_count}")
         print(f"Chance outcomes count: {chance_outcomes_count}")
@@ -77,9 +67,9 @@ def random_game(strategy=['random', 'random', 'random', 'random'], verbose=True)
     return win, legal_actions_count, chance_outcomes_count, game_length
 
 
-def main(_):
+def main():
     won = 0
-    for i in range(100000):
+    for i in range(1):
         win, _, _, _ = random_game(verbose=True)
         won += win
         if i % 1000 == 0:
@@ -88,4 +78,4 @@ def main(_):
 
 
 if __name__ == "__main__":
-    app.run(main)
+    main()

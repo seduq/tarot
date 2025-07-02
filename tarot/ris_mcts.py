@@ -2,7 +2,7 @@ import random
 import math
 import time
 from typing import Optional, Dict, Any, List
-from .game import TarotGameState
+from .tarot import Tarot
 from . import constants as Const, Phase
 from .utils import Utils
 from .cards import Card
@@ -36,7 +36,7 @@ class RIS_MCTS:
         self.num_players: int = Const.NUM_PLAYERS
         self.invalid_action_count: int = 0
 
-    def search(self, initial_state: TarotGameState, player: int, iterations: int = 100, max_time: Optional[float] = None, verbose: bool = False) -> Optional[int]:
+    def search(self, initial_state: Tarot, player: int, iterations: int = 100, max_time: Optional[float] = None, verbose: bool = False) -> Optional[int]:
         """
         Run RIS-MCTS from an initial state for a given player.
         Returns the best action found after the given number of iterations or time limit.
@@ -146,7 +146,7 @@ class RIS_MCTS:
                     node = node.children[best_action]
                     path.append(node)
                     current_state.apply_action(best_action)
-                    current_player = current_state.current_player()
+                    current_player = current_state.current
 
                     # Re-determinização após transição para novo information set
                     if current_player != player:
@@ -177,7 +177,7 @@ class RIS_MCTS:
                     action = random.choice(unexplored)
                     new_state = current_state.clone()
                     new_state.apply_action(action)
-                    next_player = new_state.current_player()
+                    next_player = new_state.current
 
                     # Re-determinização após expansão para novo information set
                     if next_player != player:
@@ -275,11 +275,11 @@ class RIS_MCTS:
                 f"[RIS-MCTS] Best action after {iterations} iterations: {best} (votes: {best_action_votes[best]})")
         return best
 
-    def _determinize_state(self, state: TarotGameState, player: int) -> TarotGameState:
+    def _determinize_state(self, state: Tarot, player: int) -> Tarot:
         """
         Generate a determinization of the state for the player (sample opponents' hands).
         """
-        if int(state.current_player()) < 0:
+        if state.current < 0:
             return state
         new_state = state.clone()
 

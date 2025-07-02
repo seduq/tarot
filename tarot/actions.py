@@ -46,38 +46,7 @@ class Action:
         return trick_winner
 
     @staticmethod
-    def apply_excuse_action(hand: List[int], player: int, taker: int, trick: List[int],
-                            tricks: List[Tuple[int, List[int]]], fool: int) -> Optional[Tuple[int, List[int]]]:
-        """
-        DEPRECATED: This method is made for Open Spiel version.
-        Applies the Excuse (Fool) card action. Handles special rules for the Excuse, including substitution if the taker wins the trick.
-        Returns the substitute card if applicable, otherwise None.
-        """
-        hand.remove(fool)
-        substitute_card = fool
-        player_is_taker = player == taker
-        use_tricks = [(player, _trick) for (trick_player, _trick) in tricks
-                      if (player_is_taker and trick_player == taker) or
-                      (not player_is_taker and trick_player != taker)]
-        for idx, (_, current_trick) in enumerate(use_tricks):
-            if any(Card.value(card) == 0.5 for card in current_trick):
-                substitute_card = next(card for card
-                                       in current_trick if Card.value(card) == 0.5)
-                current_trick.remove(substitute_card)
-                break
-
-        if substitute_card:
-            tricks.append((player, [fool]))
-
-        trick.append(substitute_card)
-        if len(trick) == Const.NUM_PLAYERS:
-            winner = Utils.trick_winner(trick)
-            trick_winner = (winner, trick)
-            return trick_winner
-        return None
-
-    @staticmethod
-    def apply_fool_action(fool_trick: List[int], fool_player, tricks: List[Tuple[int, List[int]]]) -> None:
+    def apply_fool_action(fool_trick: List[int], fool_player, tricks: List[Tuple[int, List[int]]]) -> int:
         """
         Applies the Fool card action by removing it from the hand.
         Returns the updated hand after removing the Fool card.
@@ -101,6 +70,7 @@ class Action:
         else:
             raise ValueError(
                 f"No substitute card found in tricks for player {fool_player}")
+        return substitute_card
 
     @staticmethod
     def legal_chien_actions(cards: List[int]) -> List[int]:
@@ -111,16 +81,16 @@ class Action:
         return Utils.select_discard_cards(cards)
 
     @staticmethod
-    def apply_chien_action(hand: List[int], chien: List[int], action: int) -> Tuple[List[int], List[int]]:
+    def apply_chien_action(hand: List[int], chien: List[int], discard: List[int], action: int) -> None:
         """
         Applies the chien discard action by removing the specified card from the hand and adding it to the chien.
         Returns the updated hand and chien.
         """
         if action not in hand:
             raise ValueError(f"Action {action} is not in hand: {hand}")
-        hand.remove(action)
-        chien.append(action)
-        return hand, chien
+        else:
+            hand.remove(action)
+        discard.append(action)
 
     @staticmethod
     def legal_chelem_actions(hand: List[int]) -> List[Tuple[int, float]]:
@@ -150,30 +120,6 @@ class Action:
 
         probability = constant
         return [(Const.DECLARE_POIGNEE, probability), (Const.DECLARE_NONE, 1.0 - probability)]
-
-    @staticmethod
-    def apply_declare_action(declared: List[Tuple[bool, bool]], action: int) -> Tuple[bool, bool]:
-        """
-        Applies the declaration action (chelem or poignee) and updates the declared state.
-        Returns the updated chelem and poignee declaration status.
-        """
-        chelem_declared, poignee_declared = declared[-1]
-        if action == Const.DECLARE_CHELEM:
-            if not chelem_declared:
-                chelem_declared = True
-            else:
-                raise ValueError("Chelem already declared")
-        elif action == Const.DECLARE_POIGNEE:
-            if not poignee_declared:
-                poignee_declared = True
-            else:
-                raise ValueError("Poignee already declared")
-        elif action == Const.DECLARE_NONE:
-            pass
-        else:
-            raise ValueError(f"Invalid declare action: {action}")
-
-        return chelem_declared, poignee_declared
 
     @staticmethod
     def is_action_of_type(action: int, phase: Phase) -> bool:

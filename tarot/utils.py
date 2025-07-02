@@ -110,13 +110,23 @@ class Utils:
         Determines the winner of a trick based on the cards played.
         Returns the index of the winning player.
         """
+        idx = -1
+        if Const.FOOL in trick:
+            idx = trick.index(Const.FOOL)
+            trick[idx] = -1
         lead_suit = Card.suit(trick[0])
         trumps = [(i, c) for i, c in enumerate(trick) if Card.is_trump(c)]
         if trumps:
-            return max(trumps, key=lambda x: Card.rank(x[1]))[0]
+            winner = max(trumps, key=lambda x: Card.rank(x[1]))[0]
+            if idx > -1:
+                trick[idx] = Const.FOOL
+            return winner
         lead_cards = [(i, c) for i, c in enumerate(
             trick) if Card.suit(c) == lead_suit]
-        return max(lead_cards, key=lambda x: Card.rank(x[1]))[0]
+        winner = max(lead_cards, key=lambda x: Card.rank(x[1]))[0]
+        if idx > -1:
+            trick[idx] = Const.FOOL
+        return winner
 
     @staticmethod
     def get_mask(tensor: List[int], name: str) -> List[int]:
@@ -191,8 +201,8 @@ class Utils:
         return tricks
 
     @staticmethod
-    def get_trick_position(trick_history: List[Tuple[int, List[int]]], trick: List[int]) -> int:
+    def get_trick_position(trick_history: List[Tuple[int, List[int]]]) -> int:
         """
         Get the first legal position of the trick in the trick history.
         """
-        return len([t for _, t in trick_history if len(t) > 0]) * (Const.NUM_PLAYERS + 1) + len(trick) + 1
+        return (len(trick_history) - 1) * (Const.NUM_PLAYERS + 1)

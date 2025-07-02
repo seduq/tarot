@@ -3,13 +3,12 @@ import gc
 import psutil
 from time import time
 import numpy as np
-import pyspiel
 import random
 import tracemalloc
-from tarot.game import TarotGameState
 from tarot import Const, TarotSearch
 from tarot.bids import Bid
 from tarot.constants import Phase
+from tarot.tarot import Tarot
 
 
 class MemoryProfiler:
@@ -129,8 +128,7 @@ class GameResultsAnalyzer:
 
 def ris_mcts_example(verbose=True, mcts_iterations=100):
     """Executa um jogo de Tarot com RIS-MCTS e profiling de memória"""
-    game = pyspiel.load_game('french_tarot')
-    state: TarotGameState = game.new_initial_state()
+    state = Tarot()
 
     # Configuração dos bots
     bots = ['random'] * Const.NUM_PLAYERS
@@ -148,7 +146,7 @@ def ris_mcts_example(verbose=True, mcts_iterations=100):
 
     if verbose:
         print(f"Baseline memory usage: {memory_baseline:.2f} MB")
-        print(TarotGameState.pretty_print(state))
+        print(state.pretty_print())
         print("=" * 20)
 
     # Loop principal do jogo

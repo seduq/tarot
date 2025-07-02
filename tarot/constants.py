@@ -1,5 +1,4 @@
 from enum import Enum
-import pyspiel
 
 NUM_PLAYERS = 4
 HAND_SIZE = 18
@@ -95,44 +94,14 @@ DECLARES = [DECLARE_NONE, DECLARE_CHELEM, DECLARE_POIGNEE]
 NUM_DECLARES = len(DECLARES)
 NUM_DECLARES_SIZE = 2 * NUM_PLAYERS
 
-
-GAME_TYPE = pyspiel.GameType(
-    short_name="french_tarot",
-    long_name="French Tarot",
-    dynamics=pyspiel.GameType.Dynamics.SEQUENTIAL,
-    chance_mode=pyspiel.GameType.ChanceMode.EXPLICIT_STOCHASTIC,
-    information=pyspiel.GameType.Information.IMPERFECT_INFORMATION,
-    utility=pyspiel.GameType.Utility.ZERO_SUM,
-    reward_model=pyspiel.GameType.RewardModel.TERMINAL,
-    max_num_players=NUM_PLAYERS,
-    min_num_players=NUM_PLAYERS,
-    provides_information_state_string=False,
-    provides_information_state_tensor=False,
-    provides_observation_string=True,
-    provides_observation_tensor=True,
-    parameter_specification={}
-)
-
-GAME_INFO = pyspiel.GameInfo(
-    num_distinct_actions=DECK_SIZE,
-    max_chance_outcomes=NUM_BIDS + NUM_DECLARES,
-    num_players=NUM_PLAYERS,
-    min_utility=-1.0,
-    max_utility=1.0,
-    utility_sum=0.0,
-    max_game_length=(
-        NUM_PLAYERS * NUM_TRICKS +
-        CHIEN_SIZE +
-        NUM_BID_SIZE +
-        NUM_DECLARES_SIZE)
-)
+TRICK_FINISHED = 800
 
 FOOL_NOT_PLAYED = -1
 FOOL_NOT_PAID = -2
 
 MASK_DECK_SIZE = DECK_SIZE
 MASK_NUM_TRICK_SIZE = NUM_PLAYERS
-MASK_NUM_TRICKS_SIZE = (MASK_NUM_TRICK_SIZE + 1) * (NUM_TRICKS + 2)
+MASK_NUM_TRICKS_SIZE = (MASK_NUM_TRICK_SIZE + 1) * (NUM_TRICKS + 1)
 MASK_CURRENT_PLAYER_SIZE = 1
 MASK_TAKER_PLAYER_SIZE = 1
 MASK_BID_SIZE = 4
