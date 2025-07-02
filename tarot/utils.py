@@ -42,12 +42,12 @@ class Utils:
         """
         points = 0
         bouts = (card for trick in tricks for card in trick if card in [
-                    Const.FOU, Const.BID_PETIT, Const.MONDE])
+            Const.FOOL, Const.BID_PETIT, Const.MONDE])
         bouts = set(bouts)  # Remove duplicates
         bouts = len(bouts)
         required_points = Const.POINTS_PER_BOUT[bouts]
         points += (sum([Card.value(card)
-                           for trick in tricks for card in trick]))
+                        for trick in tricks for card in trick]))
         points += (sum([Card.value(card) for card in chien])
                    if bid in [Const.BID_PETIT, Const.BID_GARDE, Const.BID_GARDE_SANS] else 0)
         required = True if (points - required_points) >= 0 else False
@@ -93,7 +93,7 @@ class Utils:
             discard = discard[:Const.CHIEN_SIZE]
         if len(discard) < size:
             trumps = [card for card in hand if Card.is_trump(card) and
-                      Card.rank(card) not in [Const.FOU, Const.PETIT, Const.MONDE]]
+                      Card.rank(card) not in [Const.FOOL, Const.PETIT, Const.MONDE]]
             trumps.sort(key=lambda x: Card.rank(x))
             while len(discard) < size and trumps:
                 discard.append(trumps.pop(0))
@@ -189,3 +189,10 @@ class Utils:
             current_trick = trick_history[start:start + Const.NUM_PLAYERS]
             tricks.append((current_player, current_trick))
         return tricks
+
+    @staticmethod
+    def get_trick_position(trick_history: List[Tuple[int, List[int]]], trick: List[int]) -> int:
+        """
+        Get the first legal position of the trick in the trick history.
+        """
+        return len([t for _, t in trick_history if len(t) > 0]) * (Const.NUM_PLAYERS + 1) + len(trick) + 1

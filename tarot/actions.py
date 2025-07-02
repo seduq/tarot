@@ -3,6 +3,7 @@ from typing import List, Optional, Tuple
 from .cards import Card
 from .utils import Utils
 from . import constants as Const
+from .constants import Phase
 
 
 class Action:
@@ -11,16 +12,12 @@ class Action:
     Includes logic for trick actions, chien discards, excuse actions, chelem and poignee declarations.
     """
     @staticmethod
-    def legal_trick_actions(legal_actions: List[int], trick: List[int], is_first: bool) -> List[int]:
+    def legal_trick_actions(legal_actions: List[int], trick: List[int]) -> List[int]:
         """
         Returns the list of legal cards that can be played from the hand given the current trick.
         Enforces following suit and trump rules according to Tarot rules.
-        For simplicity, if it's the first card played in the trick, the Fool (Const.FOU) is removed from the hand.
         """
         legal_actions = legal_actions.copy()
-        if is_first:
-            if Const.FOU in legal_actions:
-                legal_actions.remove(Const.FOU)
         if len(trick) == 0:
             return legal_actions
         lead_suit = Card.suit(trick[0])
@@ -49,17 +46,10 @@ class Action:
         return trick_winner
 
     @staticmethod
-    def legal_chien_discards(cards: List[int]) -> List[int]:
-        """
-        Returns the list of cards that can be legally discarded to the chien (dog) according to Tarot rules.
-        Trumps and kings cannot be discarded.
-        """
-        return Utils.select_discard_cards(cards)
-
-    @staticmethod
     def apply_excuse_action(hand: List[int], player: int, taker: int, trick: List[int],
                             tricks: List[Tuple[int, List[int]]], fool: int) -> Optional[Tuple[int, List[int]]]:
         """
+        DEPRECATED: This method is made for Open Spiel version.
         Applies the Excuse (Fool) card action. Handles special rules for the Excuse, including substitution if the taker wins the trick.
         Returns the substitute card if applicable, otherwise None.
         """
@@ -85,6 +75,52 @@ class Action:
             trick_winner = (winner, trick)
             return trick_winner
         return None
+
+    @staticmethod
+    def apply_fool_action(fool_trick: List[int], fool_player, tricks: List[Tuple[int, List[int]]]) -> None:
+        """
+        Applies the Fool card action by removing it from the hand.
+        Returns the updated hand after removing the Fool card.
+        """
+        if Const.FOOL not in fool_trick:
+            raise ValueError(
+                f"Fool card {Const.FOOL} not in trick: {fool_trick}")
+        fool_trick.remove(Const.FOOL)
+        substitute_card = None
+        use_tricks = [trick for (player, trick)
+                      in tricks if player == fool_player]
+        for idx, current_trick in enumerate(use_tricks):
+            if any(Card.value(card) == 0.5 for card in current_trick):
+                substitute_card = next(card for card
+                                       in current_trick if Card.value(card) == 0.5)
+                current_trick.remove(substitute_card)
+                break
+        if substitute_card:
+            fool_trick.append(substitute_card)
+            tricks.append((fool_player, [Const.FOOL]))
+        else:
+            raise ValueError(
+                f"No substitute card found in tricks for player {fool_player}")
+
+    @staticmethod
+    def legal_chien_actions(cards: List[int]) -> List[int]:
+        """
+        Returns the list of cards that can be legally discarded to the chien (dog) according to Tarot rules.
+        Trumps and kings cannot be discarded.
+        """
+        return Utils.select_discard_cards(cards)
+
+    @staticmethod
+    def apply_chien_action(hand: List[int], chien: List[int], action: int) -> Tuple[List[int], List[int]]:
+        """
+        Applies the chien discard action by removing the specified card from the hand and adding it to the chien.
+        Returns the updated hand and chien.
+        """
+        if action not in hand:
+            raise ValueError(f"Action {action} is not in hand: {hand}")
+        hand.remove(action)
+        chien.append(action)
+        return hand, chien
 
     @staticmethod
     def legal_chelem_actions(hand: List[int]) -> List[Tuple[int, float]]:
@@ -114,3 +150,37 @@ class Action:
 
         probability = constant
         return [(Const.DECLARE_POIGNEE, probability), (Const.DECLARE_NONE, 1.0 - probability)]
+
+    @staticmethod
+    def apply_declare_action(declared: List[Tuple[bool, bool]], action: int) -> Tuple[bool, bool]:
+        """
+        Applies the declaration action (chelem or poignee) and updates the declared state.
+        Returns the updated chelem and poignee declaration status.
+        """
+        chelem_declared, poignee_declared = declared[-1]
+        if action == Const.DECLARE_CHELEM:
+            if not chelem_declared:
+                chelem_declared = True
+            else:
+                raise ValueError("Chelem already declared")
+        elif action == Const.DECLARE_POIGNEE:
+            if not poignee_declared:
+                poignee_declared = True
+            else:
+                raise ValueError("Poignee already declared")
+        elif action == Const.DECLARE_NONE:
+            pass
+        else:
+            raise ValueError(f"Invalid declare action: {action}")
+
+        return chelem_declared, poignee_declared
+
+    @staticmethod
+    def is_action_of_type(action: int, phase: Phase) -> bool:
+        if action > 100 and action < 600:
+            return phase == Phase.TRICK or phase == Phase.CHIEN
+        if action >= 600 and action < 700:
+            return phase == Phase.BIDDING
+        if action >= 700 and action < 800:
+            return phase == Phase.DECLARE
+        return False

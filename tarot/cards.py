@@ -21,7 +21,7 @@ class Card:
                 return "Le Petit"
             elif rank == Const.MONDE:
                 return "Le Monde"
-            elif rank == Const.FOU:
+            elif rank == Const.FOOL:
                 return "Le Fou"
             return f"Trunfo {rank}"
         suit_names = ["Espadas", "Copas", "Paus", "Ouros"]
@@ -86,7 +86,7 @@ class Card:
         """
         rank = Card.rank(card)
         if Card.is_trump(card):
-            if (card == Const.PETIT or card == Const.MONDE or card == Const.FOU):
+            if (card == Const.PETIT or card == Const.MONDE or card == Const.FOOL):
                 return 4.5
             else:
                 return 0.5

@@ -95,7 +95,7 @@ class TarotGameState(pyspiel.State):
         if self.phase == Phase.CHIEN:
             return self._legal_chien_discards()
         if self.phase == Phase.TRICK:
-            return Action.legal_trick_actions(self.hands[self.current], self.trick, len(self.tricks) == 1)
+            return Action.legal_trick_actions(self.hands[self.current], self.trick)
         return []
 
     def apply_action(self, action):
@@ -123,7 +123,7 @@ class TarotGameState(pyspiel.State):
         return Bid.legal_bids(self.bids)
 
     def _legal_chien_discards(self):
-        return Action.legal_chien_discards(self.hands[self.taker])
+        return Action.legal_chien_actions(self.hands[self.taker])
 
     def _legal_chelem_action(self):
         if not self.is_taker() and self.poignee_declared_defenders:
@@ -142,7 +142,7 @@ class TarotGameState(pyspiel.State):
         return actions
 
     def _legal_trick_actions(self):
-        return Action.legal_trick_actions(self.hands[self.current], self.trick, len(self.tricks) == 1)
+        return Action.legal_trick_actions(self.hands[self.current], self.trick)
 
     def _apply_chelem_action(self, action):
         if action == Const.DECLARE_CHELEM and self.current == self.taker:
@@ -193,7 +193,7 @@ class TarotGameState(pyspiel.State):
         card_played = action
         hand = self.hands[self.current]
         trick_winner = None
-        if card_played == Const.FOU:
+        if card_played == Const.FOOL:
             trick_winner = Action.apply_excuse_action(
                 hand, self.current, self.taker,
                 self.trick, self.tricks, card_played)

@@ -232,12 +232,6 @@ def _handle_chance_node(state, bots, bids, verbose):
     if verbose:
         print(f"Chances outcome: {state.chance_outcomes()}")
 
-    # Determinar ação baseada no tipo de bot
-    if bots[state.current] != 'ris-mcts':
-        action = Const.BID_PASS
-    else:
-        action = Const.BID_PETIT
-
     # Aplicar probabilidades de chance
     outcomes = state.chance_outcomes()
     actions, probs = zip(*outcomes)
@@ -283,7 +277,7 @@ def _execute_ris_mcts(state, ris_mcts, profiler, results, game_state, mcts_itera
 
     # Execução do RIS-MCTS
     mcts_action = ris_mcts.search(
-        state, state.current, max_time=10, iterations=mcts_iterations, verbose=verbose
+        state, state.current, max_time=5, iterations=mcts_iterations, verbose=verbose
     )
 
     # Medições após o RIS-MCTS
@@ -667,8 +661,8 @@ def analyze_memory_usage(results_list):
 
 
 if __name__ == "__main__":
-    n_games = [20]
-    mcts_iterations = [1000]
+    n_games = [10, 50, 100]
+    mcts_iterations = [100, 500, 1000]
     for games in n_games:
         for iterations in mcts_iterations:
             print(
