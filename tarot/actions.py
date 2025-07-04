@@ -31,7 +31,7 @@ class Action:
         return legal_actions
 
     @staticmethod
-    def apply_trick_action(hand: List[int], trick: List[int], action: int) -> Optional[Tuple[int, List[int]]]:
+    def apply_trick_action(player: int, hand: List[int], trick: List[int], action: int) -> Optional[Tuple[int, List[int]]]:
         """
         Applies the given action (card play) to the hand and trick. Returns the winner and trick if the trick is complete, otherwise None.
         """
@@ -39,8 +39,8 @@ class Action:
             raise ValueError(f"Action {action} is not in hand: {hand}")
         trick_winner = None
         hand.remove(action)
-        trick.append(action)
-        if len(trick) == Const.NUM_PLAYERS:
+        trick[player] = action
+        if len([card for card in trick if card > -1]) == Const.NUM_PLAYERS:
             winner = Utils.trick_winner(trick)
             trick_winner = (winner, trick)
         return trick_winner
@@ -81,7 +81,7 @@ class Action:
         return Utils.select_discard_cards(cards)
 
     @staticmethod
-    def apply_chien_action(hand: List[int], chien: List[int], discard: List[int], action: int) -> None:
+    def apply_chien_action(hand: List[int], discard: List[int], action: int) -> None:
         """
         Applies the chien discard action by removing the specified card from the hand and adding it to the chien.
         Returns the updated hand and chien.

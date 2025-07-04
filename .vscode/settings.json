@@ -133,10 +133,12 @@
     "pycache",
     "pyspiel",
     "pytest",
+    "redeterminize",
     "repr",
     "retropropagação",
     "Retropropagação",
     "RISMCTS",
+    "Rizz",
     "scipy",
     "setuptools",
     "testpaths"

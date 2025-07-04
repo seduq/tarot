@@ -5,7 +5,7 @@ from .utils import Utils
 from .actions import Action
 from . import constants as Const
 from .constants import Phase
-from .ris_mcts import RIS_MCTS as TarotSearch
+from .mcts import TarotISMCTSAgent
 
 
 __all__ = [
@@ -16,5 +16,5 @@ __all__ = [
     "Action",
     "Const",
     "Phase",
-    "TarotSearch",
+    "TarotISMCTSAgent",
 ]

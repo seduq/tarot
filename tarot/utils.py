@@ -134,11 +134,12 @@ class Utils:
         Get the mask slice in the tensor for the given mask name.
         Names:
         - 'played_cards': Played cards, each index is either player id or -1 (deck size)
+        - 'taker_know_cards': Current trick being played (1 + number of players)
+        - 'played_tricks': Known tricks of the player (1 + number of players) * (number of tricks + 1)
         - 'current_trick': Current trick being played (1 + number of players)
-        - 'trick_history': Known tricks of the player (1 + number of players) * (number of tricks + 1)
         - 'current_player': Current player index
         - 'taker_player': Taker player index
-        - 'bid': Current bid of the player
+        - 'bids': Bids of all players
         - 'declarations': Declarations made by each team (2 for each team)
         - 'phase': Current phase of the game
         """

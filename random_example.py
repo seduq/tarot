@@ -69,12 +69,13 @@ def random_game(strategy=['random', 'random', 'random', 'random'], verbose=True)
 
 def main():
     won = 0
-    for i in range(1):
+    n_games = 100000
+    for i in range(n_games):
         win, _, _, _ = random_game(verbose=True)
         won += win
-        if i % 1000 == 0:
+        if (i + 1) % 100 == 0:
             print(f"Game {i}: Won {win} games so far")
-    print(f"Won {won} out of 100000 games ({won / 1000:.2f}%)")
+    print(f"Won {won} out of {n_games} games ({won / n_games:.2f}%)")
 
 
 if __name__ == "__main__":
