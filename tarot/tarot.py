@@ -96,7 +96,6 @@ class Tarot:
                     self.fool_player = self.current
                     self.fool_state = Const.FOOL_NOT_PAID
                     self.fool_trick = self.trick
-                    self.fool_trick_index = len(self.tricks)
         elif self.phase == Phase.DECLARE:
             if action == Const.DECLARE_CHELEM:
                 if not self.chelem_declared_taker and self.current == self.taker:
@@ -168,6 +167,13 @@ class Tarot:
                 if len(self.tricks) == Const.NUM_TRICKS and self.fool_player is not None:
                     substitute_card = Action.apply_fool_action(
                         self.fool_trick, self.fool_player, self.tricks)
+                    if substitute_card is None:
+                        if self.fool_player == self.taker:
+                            raise ValueError(
+                                "No substitute card found for Fool in taker's tricks")
+                        substitute_card = next(c for (player, trick) in self.tricks for c in trick if Card.value(
+                            c) == 0.5 and player != self.fool_player and player != self.taker)
+
                     idx = self.played_tricks.index(Const.FOOL)
                     sub_idx = self.played_tricks.index(substitute_card)
                     self.played_tricks[sub_idx] = -1
@@ -219,6 +225,9 @@ class Tarot:
             if card not in chien_know_cards and card not in self.discard:
                 chien_know_cards.add(card)
         self.taker_chien_hand = list(chien_know_cards)
+        for card in self.discard:
+            card_idx = Card.to_idx(card)
+            self.played_cards[card_idx] = Const.CHIEN_ID
 
     def is_chance_node(self) -> bool:
         """
@@ -314,8 +323,9 @@ class Tarot:
             return Card.name(action)
         return "N/A"
 
-    def pretty_print(self) -> str:
-        string = f"Current Player: {self.current}\n"
+    def __str__(self) -> str:
+        string = "=" * 40 + "\n"
+        string += f"Current Player: {self.current}\n"
         string += f"Taker: {self.taker}\n"
         string += f"Phase: {self.phase}\n"
         string += f"Bids: {self.bids}\n"
@@ -332,7 +342,9 @@ class Tarot:
         string += f"Taker Declared Poignee: {self.poignee_declared_taker}\n"
         string += f"Defenders Declared Chelem: {self.chelem_declared_defenders}\n"
         string += f"Defenders Declared Poignee: {self.poignee_declared_defenders}\n"
-        string += "=" * 10 + "\n"
+        string += "=" * 40 + "\n"
         string += f"Player Cards: {', '.join([Card.name(card) if card != -1 else 'N/A' for card in self.played_cards])}\n"
+        string += "=" * 40 + "\n"
         string += f"Trick History: {', '.join([Card.name(card) if card != -1 else 'N/A' for card in self.played_tricks])}\n"
+        string += "=" * 40 + "\n"
         return string

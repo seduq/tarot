@@ -308,7 +308,7 @@ def play_with_strategy(strategy_type: StrategyType, verbose: bool = True, iterat
 
     if verbose:
         print(f"\nStarting game with strategy: {strategy_type.value}")
-        print(state.pretty_print())
+        print(state)
         print("=" * 50)
 
     iteration = 0
@@ -382,9 +382,7 @@ def play_with_strategy(strategy_type: StrategyType, verbose: bool = True, iterat
     agent.metrics.finalize(total_game_time)
 
     if verbose:
-        print(f"\nGame completed in {iteration} iterations")
-        print(
-            f"Final scores: {state.returns() if state.is_terminal() else 'Incomplete'}")
+        print(state)
         agent.metrics.print_summary(strategy_type.value)
 
     return agent.metrics
@@ -522,9 +520,9 @@ def main():
 
     # Run comparison
     results = compare_strategies(
-        strategies=strategies,
+        strategies=[StrategyType.IS_MCTS_PER_TRICK],
         iterations=200,  # MCTS iterations per decision
-        games_per_strategy=100,  # Number of games per strategy
+        games_per_strategy=1,  # Number of games per strategy
         verbose=False  # Set to True for detailed output
     )
 
