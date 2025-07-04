@@ -3,95 +3,15 @@ import random
 from tarot import Tarot, Const, Phase, TarotISMCTSAgent
 
 
-def play_tarot_game_demo():
-    """Play a demo game with IS-MCTS agents focusing on TRICK phase"""
-    game = Tarot()
-
-    # Create agents
-    agents = [TarotISMCTSAgent(i, iterations=300)
-              for i in range(Const.NUM_PLAYERS)]
-
-    # Configure agents for multiple determinization
-    for agent in agents:
-        agent.use_multiple_determinization = True
-        agent.num_determinizations = 6
-        agent.determinization_strategy = "per_trick"
-
-    print("Starting French Tarot game with IS-MCTS agents")
-    print("=" * 50)
-
-    move_count = 0
-    trick_count = 0
-    max_moves = 120  # Limit for demo
-
-    while not game.is_terminal() and move_count < max_moves:
-        print(f"\nPhase: {game.phase}, Current Player: {game.current}")
-
-        if game.phase == Phase.TRICK:
-            # Check if starting new trick
-            current_trick_cards = [card for card in game.trick if card != -1]
-            if len(current_trick_cards) == 0:
-                trick_count += 1
-                print(f"\n--- Trick {trick_count} ---")
-
-            # Get action from IS-MCTS agent
-            agent = agents[game.current]
-            start_time = time.time()
-            action = agent.get_action(game)
-            decision_time = time.time() - start_time
-
-            # Debug: Check if agent returns Const.TRICK_FINISHED when it shouldn't
-            if action == Const.TRICK_FINISHED and len(game.hands[game.current]) > 0:
-                print(
-                    f"  WARNING: Player {game.current} has {len(game.hands[game.current])} cards but chose Const.TRICK_FINISHED")
-                # Force to play a random card instead
-                legal_actions = game.legal_actions()
-                if legal_actions and legal_actions[0] != Const.TRICK_FINISHED:
-                    action = random.choice(
-                        [a for a in legal_actions if a != Const.TRICK_FINISHED])
-                    print(f"  Forcing player to choose card {action} instead")
-
-            print(
-                f"Player {game.current} plays card {action} (took {decision_time:.3f}s)")
-            move_count += 1
-
-            # Stop after a few tricks for demo
-            if trick_count >= 3:
-                print("\nDemo stopping after 3 tricks")
-                break
-
-        elif game.phase == Phase.TRICK_FINISHED:
-            print("Trick finished, applying Const.TRICK_FINISHED action")
-            action = Const.TRICK_FINISHED
-
-        else:
-            # For other phases, use random actions
-            legal_actions = game.legal_actions()
-            action = random.choice(legal_actions) if legal_actions else None
-            print(
-                f"Phase {game.phase}: Player {game.current} takes action {action}")
-
-        if action is not None:
-            game.apply_action(action)
-            game.next()
-        else:
-            break
-
-    print(
-        f"\nGame completed after {move_count} moves and {trick_count} tricks")
-    print("Final scores:", game.returns()
-          if hasattr(game, 'returns') else "N/A")
-
-
 def compare_tarot_strategies(num_games=3):
     """Compare different determinization strategies for French Tarot"""
     print("Comparing IS-MCTS Strategies for French Tarot")
     print("=" * 50)
 
     strategies = [
-        ("Single Determinization", False, "per_action"),
-        ("Multiple Per-Action", True, "per_action"),
-        ("Multiple Per-Trick", True, "per_trick")
+        ("Single Determinization", False, TarotISMCTSAgent.Strategy.PER_ACTION),
+        ("Multiple Per-Action", True, TarotISMCTSAgent.Strategy.PER_ACTION),
+        ("Multiple Per-Trick", True, TarotISMCTSAgent.Strategy.PER_TRICK)
     ]
 
     results = {}
@@ -148,10 +68,6 @@ def compare_tarot_strategies(num_games=3):
                 else:
                     break
 
-                # Stop early for demo purposes
-                if decision_count >= 1000:
-                    break
-
             game_time = time.time() - game_start
             total_time += game_time
             total_decisions += decision_count
@@ -190,13 +106,7 @@ def compare_tarot_strategies(num_games=3):
 
 if __name__ == "__main__":
     print("French Tarot IS-MCTS Implementation")
-    print("Focusing on TRICK phase with proper Const.TRICK_FINISHED handling")
     print("=" * 60)
-
-    # Run demo game
-    play_tarot_game_demo()
-
-    print("\n" + "=" * 60)
 
     # Compare strategies
     compare_tarot_strategies(2)

@@ -1,3 +1,4 @@
+from enum import Enum
 import random
 import math
 import time
@@ -66,33 +67,66 @@ class TarotISMCTSNode:
         self.tried_actions = set()
 
 
+class ISMCTSStrategy(Enum):
+    """Enum for IS-MCTS strategies"""
+    PER_ACTION = "per_action"  # Determinize per action
+    PER_TRICK = "per_trick"  # Determinize per trick
+
+
 class TarotISMCTSAgent:
     """IS-MCTS Agent for French Tarot game"""
 
-    def __init__(self, player_id: int, iterations=1000, exploration_constant=1.41):
+    Strategy = ISMCTSStrategy  # Expose strategy enum for external use
+
+    def __init__(self,
+                 player_id: int,
+                 iterations=1000,
+                 exploration_constant=math.sqrt(2),
+                 pw_alpha=0.5,
+                 pw_constant=2.0,
+                 rave_constant=200,
+                 num_determinizations=10,
+                 multiple_determinization=True,
+                 strategy: ISMCTSStrategy = ISMCTSStrategy.PER_TRICK):
         self.player_id = player_id
         self.iterations = iterations
         self.exploration_constant = exploration_constant
-        self.tree = {}  # Maps information sets to nodes
+        # Maps information sets to nodes
+        self.tree: Dict[TarotInformationSet, TarotISMCTSNode] = {}
 
         # Progressive widening parameters
-        self.pw_alpha = 0.5
-        self.pw_constant = 2.0
+        self.pw_alpha = pw_alpha
+        self.pw_constant = pw_constant
 
         # RAVE parameters
-        self.rave_constant = 300
+        self.rave_constant = rave_constant
 
         # Multiple determinization parameters
-        self.num_determinizations = 10
-        self.use_multiple_determinization = True
-        self.determinization_strategy = "per_action"  # "per_action" or "per_trick"
+        self.num_determinizations = num_determinizations
+        self.use_multiple_determinization = multiple_determinization
+        self.determinization_strategy = strategy
 
         # Per-trick determinization state
         self.current_trick_determinizations = []
         self.last_trick_state = None
 
+        # Node counting metrics
+        self.total_nodes_created = 0
+        self.total_simulations_run = 0
+        self.nodes_created_this_decision = 0
+        self.simulations_this_decision = 0
+
+        # Tree counting metrics for multiple determinization
+        self.total_trees_created = 0
+        self.trees_created_this_decision = 0
+
     def get_action(self, game_state: Tarot) -> int:
         """Get the best action using IS-MCTS with multiple determinization"""
+        # Reset per-decision counters
+        self.nodes_created_this_decision = 0
+        self.simulations_this_decision = 0
+        self.trees_created_this_decision = 0
+
         # Only work in TRICK phase, skip Const.TRICK_FINISHED
         if game_state.phase != Phase.TRICK:
             # For non-trick phases, return a random legal action or handle Const.TRICK_FINISHED
@@ -105,7 +139,7 @@ class TarotISMCTSAgent:
                 return Const.TRICK_FINISHED
 
         if self.use_multiple_determinization:
-            if self.determinization_strategy == "per_trick":
+            if self.determinization_strategy == ISMCTSStrategy.PER_TRICK:
                 return self._get_action_per_trick_determinization(game_state)
             else:
                 return self._get_action_multiple_determinization(game_state)
@@ -302,6 +336,8 @@ class TarotISMCTSAgent:
 
             if info_set not in self.tree:
                 self.tree[info_set] = TarotISMCTSNode(info_set)
+                self.total_nodes_created += 1
+                self.nodes_created_this_decision += 1
 
             node = self.tree[info_set]
             action = self._select_action(game_state, node)
@@ -312,6 +348,8 @@ class TarotISMCTSAgent:
                 new_info_set = self._get_information_set(game_state)
                 node.children[action] = TarotISMCTSNode(
                     new_info_set, node, action)
+                self.total_nodes_created += 1
+                self.nodes_created_this_decision += 1
 
         # Simple rollout and reward
         final_state = self._rollout(game_state)
@@ -319,6 +357,10 @@ class TarotISMCTSAgent:
 
         # Backpropagation
         self._backpropagate(path, reward)
+
+        # Count simulation
+        self.total_simulations_run += 1
+        self.simulations_this_decision += 1
 
     def _select_action(self, game_state: Tarot, node: TarotISMCTSNode) -> int:
         """Select action using UCB1 with RAVE and progressive widening"""
@@ -501,9 +543,17 @@ class TarotISMCTSAgent:
     def _run_single_determinization_mcts(self, determinized_state: Tarot, iterations: int) -> Tuple[Optional[int], float]:
         """Run MCTS on a single determinized state"""
         # Use a separate tree for this determinization to avoid contamination
-        temp_tree = {}
+        temp_tree: Dict[TarotInformationSet, TarotISMCTSNode] = {}
         original_tree = self.tree
         self.tree = temp_tree
+
+        # Track nodes created in this determinization
+        nodes_before = self.total_nodes_created
+        simulations_before = self.total_simulations_run
+
+        # Count this tree creation
+        self.total_trees_created += 1
+        self.trees_created_this_decision += 1
 
         try:
             info_set = self._get_information_set(determinized_state)
@@ -511,6 +561,13 @@ class TarotISMCTSAgent:
             # Run MCTS iterations
             for _ in range(iterations):
                 self._simulate(determinized_state, info_set)
+
+            # Update per-decision counters with nodes created in this determinization
+            nodes_created_here = self.total_nodes_created - nodes_before
+            simulations_run_here = self.total_simulations_run - simulations_before
+
+            self.nodes_created_this_decision += nodes_created_here
+            self.simulations_this_decision += simulations_run_here
 
             # Get best action and its quality
             if info_set in self.tree:
@@ -545,3 +602,68 @@ class TarotISMCTSAgent:
             return returns[self.player_id]
         else:
             return 0.0
+
+    def get_tree_stats(self) -> Dict[str, int]:
+        """Get current tree statistics"""
+        if self.use_multiple_determinization:
+            # For multiple determinization strategies, we don't maintain a persistent tree
+            # Return accumulated statistics from all determinizations
+            return {
+                'total_nodes': 0,  # No persistent tree
+                'nodes_created_this_decision': self.nodes_created_this_decision,
+                'total_nodes_created': self.total_nodes_created,
+                'total_visits': 0,  # No persistent tree visits
+                'total_simulations': self.total_simulations_run,
+                'simulations_this_decision': self.simulations_this_decision,
+                'max_depth': 0,  # No persistent tree depth
+                'total_trees_created': self.total_trees_created,
+                'trees_created_this_decision': self.trees_created_this_decision
+            }
+        else:
+            # For single determinization, use the actual tree statistics
+            total_visits = sum(
+                node.visits for node in self.tree.values()) if self.tree else 0
+            max_depth = self._calculate_max_depth() if self.tree else 0
+
+            return {
+                'total_nodes': len(self.tree),
+                'nodes_created_this_decision': self.nodes_created_this_decision,
+                'total_nodes_created': self.total_nodes_created,
+                'total_visits': total_visits,
+                'total_simulations': self.total_simulations_run,
+                'simulations_this_decision': self.simulations_this_decision,
+                'max_depth': max_depth,
+                'total_trees_created': 1 if self.tree else 0,  # Single persistent tree
+                'trees_created_this_decision': 0  # No trees created per decision in single mode
+            }
+
+    def _calculate_max_depth(self) -> int:
+        """Calculate maximum depth of the tree"""
+        if not self.tree:
+            return 0
+
+        max_depth = 0
+        for node in self.tree.values():
+            depth = self._get_node_depth(node)
+            max_depth = max(max_depth, depth)
+
+        return max_depth
+
+    def _get_node_depth(self, node: TarotISMCTSNode) -> int:
+        """Get depth of a specific node"""
+        depth = 0
+        current = node
+        while current.parent is not None:
+            depth += 1
+            current = current.parent
+        return depth
+
+    def reset_tree(self):
+        """Reset the tree (useful for new games)"""
+        self.tree = {}
+        self.total_nodes_created = 0
+        self.total_simulations_run = 0
+        self.nodes_created_this_decision = 0
+        self.simulations_this_decision = 0
+        self.total_trees_created = 0
+        self.trees_created_this_decision = 0
