@@ -422,31 +422,17 @@ class TarotISMCTSAgent:
 
     def _rollout(self, game_state: Tarot) -> Tarot:
         """Random rollout to terminal state"""
-        # Create a simple copy for rollout
-        current_state = Tarot()
+        # Create a deep copy for rollout
+        current_state = game_state.clone()
 
-        # Copy basic state
-        current_state.phase = game_state.phase
-        current_state.current = game_state.current
-        current_state.taker = game_state.taker
-        current_state.taker_bid = game_state.taker_bid
-        current_state.bids = game_state.bids.copy()
-        current_state.trick = current_state.trick.copy(
-        ) if game_state.trick else [-1] * Const.NUM_PLAYERS
-        current_state.tricks = game_state.tricks.copy()
-        current_state.played_cards = game_state.played_cards.copy()
-        current_state.chien = game_state.chien.copy()
-        current_state.discard = game_state.discard.copy()
-        current_state.hands = [hand.copy() for hand in game_state.hands]
-
-        # Copy declarations
-        current_state.chelem_declared_taker = game_state.chelem_declared_taker
-        current_state.chelem_declared_defenders = game_state.chelem_declared_defenders
-        current_state.poignee_declared_taker = game_state.poignee_declared_taker
-        current_state.poignee_declared_defenders = game_state.poignee_declared_defenders
-
-        # Simple random rollout - just return current state for scoring
-        # In a real implementation, you would continue playing randomly
+        # Play randomly until terminal state
+        while not current_state.is_terminal():
+            legal_actions = current_state.legal_actions()
+            if not legal_actions:
+                break  # Defensive: no legal actions, cannot proceed
+            action = random.choice(legal_actions)
+            current_state.apply_action(action)
+            current_state.next()
         return current_state
 
     def _backpropagate(self, path: List[Tuple[TarotISMCTSNode, int]], reward: float):
@@ -468,37 +454,15 @@ class TarotISMCTSAgent:
     def _determinize_game_state(self, game_state: Tarot) -> Tarot:
         """Create one possible complete game state from current information"""
         # Create a simple copy without using the complex tensor system
-        determinized_state = Tarot()
-
-        # Copy basic game state
-        determinized_state.phase = game_state.phase
-        determinized_state.current = game_state.current
-        determinized_state.taker = game_state.taker
-        determinized_state.taker_bid = game_state.taker_bid
-        determinized_state.bids = game_state.bids.copy()
-
-        # Properly initialize trick - ensure it has the right size
-        determinized_state.trick = game_state.trick.copy()
-
-        determinized_state.tricks = game_state.tricks.copy()
-        determinized_state.played_cards = game_state.played_cards.copy()
-        determinized_state.chien = game_state.chien.copy()
-        determinized_state.discard = game_state.discard.copy()
-        determinized_state.hands = [[] for _ in range(
-            Const.NUM_PLAYERS)]  # Will be filled later
-
-        # Copy declarations
-        determinized_state.chelem_declared_taker = game_state.chelem_declared_taker
-        determinized_state.chelem_declared_defenders = game_state.chelem_declared_defenders
-        determinized_state.poignee_declared_taker = game_state.poignee_declared_taker
-        determinized_state.poignee_declared_defenders = game_state.poignee_declared_defenders
+        determinized_state = game_state.clone()
 
         # What we know for certain
-        my_hand = game_state.hands[self.player_id].copy()
+        my_hand = game_state.hands[self.player_id]
         played_cards_set = set(
-            card for card in game_state.played_cards if card != -1)
+            Card.from_idx(card) for card, player in enumerate(game_state.played_cards) if player != -1)
         current_trick_cards = set(
             card for card in game_state.trick if card != -1)
+        taker_know_cards = game_state.taker_chien_hand
 
         # What we need to guess: other players' hands
         # Import Card class for card conversion
@@ -510,7 +474,8 @@ class TarotISMCTSAgent:
             card = Card.from_idx(card_idx)
             if (card not in my_hand and
                 card not in played_cards_set and
-                    card not in current_trick_cards):
+                    card not in current_trick_cards and
+                    card not in taker_know_cards):
                 unknown_cards.append(card)
 
         # Randomly distribute unknown cards to other players
@@ -526,7 +491,16 @@ class TarotISMCTSAgent:
         for player in range(Const.NUM_PLAYERS):
             if player != self.player_id:
                 original_hand_size = len(game_state.hands[player])
-                determinized_state.hands[player] = []
+                # Check if this player is the taker
+                # Add cards that are known to the taker
+                # Except the played cards
+                if determinized_state.taker == player:
+                    determinized_state.hands[player] = list(
+                        set(taker_know_cards).difference(played_cards_set))
+                    original_hand_size = (
+                        original_hand_size - len(determinized_state.hands[player]))
+                else:
+                    determinized_state.hands[player] = []
 
                 # Give this player the right number of cards
                 for _ in range(original_hand_size):
@@ -534,9 +508,6 @@ class TarotISMCTSAgent:
                         determinized_state.hands[player].append(
                             unknown_cards[card_index])
                         card_index += 1
-            else:
-                # Keep my hand exactly as it is
-                determinized_state.hands[player] = my_hand.copy()
 
         return determinized_state
 

@@ -303,6 +303,7 @@ def play_with_strategy(strategy_type: StrategyType, verbose: bool = True, iterat
     other_agents = [create_agent(i, StrategyType.RANDOM, 100)
                     for i in range(1, 4)]
     all_agents = [agent] + other_agents
+    random.shuffle(all_agents)
 
     game_start_time = time.time()
 

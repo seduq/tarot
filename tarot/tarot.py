@@ -276,27 +276,22 @@ class Tarot:
 
     def from_tensor(self, tensor: List[int]) -> None:
 
-        played_cards = Utils.get_mask(tensor, 'played_cards',)
-        current_trick = Utils.get_mask(tensor, 'current_trick')
-        played_tricks = Utils.get_mask(tensor, 'played_tricks')
-        current_player = Utils.get_mask(tensor, 'current_player')
-        taker_player = Utils.get_mask(tensor, 'taker_player')
-        bids = Utils.get_mask(tensor, 'bids')
+        self.played_cards = Utils.get_mask(tensor, 'played_cards',)
+        self.taker_chien_hand = Utils.get_mask(tensor, 'taker_chien_hand')
+        self.played_tricks = Utils.get_mask(tensor, 'played_tricks')
+        self.trick = Utils.get_mask(tensor, 'current_trick')
+        self.current = Utils.get_mask(tensor, 'current_player')[0]
+        self.taker = Utils.get_mask(tensor, 'taker_player')[0]
+        self.bids = Utils.get_mask(tensor, 'bids')
         declarations = Utils.get_mask(tensor, 'declarations')
-        phase = Utils.get_mask(tensor, 'phase')
+        phase = Utils.get_mask(tensor, 'phase')[0]
 
-        self.played_cards = played_cards
-        self.trick = [t for t in current_trick if t != -1]
-        self.played_tricks = played_tricks
-        self.tricks = Utils.get_tricks(played_tricks)
-        self.current = current_player[0]
-        self.taker = taker_player[0]
-        self.bids = bids
+        self.tricks = Utils.get_tricks(self.played_tricks)
         self.chelem_declared_taker = bool(declarations[0])
         self.chelem_declared_defenders = bool(declarations[1])
         self.poignee_declared_taker = bool(declarations[2])
         self.poignee_declared_defenders = bool(declarations[3])
-        self.phase = Const.Phase(phase[0])
+        self.phase = Const.Phase(phase)
 
     def clone(self):
         clone = Tarot()

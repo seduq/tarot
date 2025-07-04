@@ -134,7 +134,7 @@ class Utils:
         Get the mask slice in the tensor for the given mask name.
         Names:
         - 'played_cards': Played cards, each index is either player id or -1 (deck size)
-        - 'taker_know_cards': Current trick being played (1 + number of players)
+        - 'taker_chien_hand': Know cards of the taker (hand size)
         - 'played_tricks': Known tricks of the player (1 + number of players) * (number of tricks + 1)
         - 'current_trick': Current trick being played (1 + number of players)
         - 'current_player': Current player index
@@ -156,8 +156,9 @@ class Utils:
         Sets the mask slice in the tensor for the given mask name.
         Names:
         - 'played_cards': Played cards, each index is either player id or -1
+        - 'taker_chien_hand': Know cards of the taker
+        - 'played_tricks': Known tricks of the player
         - 'current_trick': Current trick being played
-        - 'trick_history': Known tricks of the player
         - 'current_player': Current player index
         - 'taker_player': Taker player index
         - 'bid': Current bid of the player
@@ -194,10 +195,12 @@ class Utils:
         for i in range(Const.NUM_TRICKS):
             idx = i * (Const.NUM_PLAYERS + 1)
             current_player = trick_history[idx]
-            if (current_player == - 1):
-                break
             start = idx + 1
-            current_trick = trick_history[start:start + Const.NUM_PLAYERS]
+            end = start + Const.NUM_PLAYERS
+            if (current_player == - 1 or
+                    -1 not in trick_history[start:end]):
+                break
+            current_trick = trick_history[start:end]
             tricks.append((current_player, current_trick))
         return tricks
 

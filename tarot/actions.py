@@ -46,7 +46,7 @@ class Action:
         return trick_winner
 
     @staticmethod
-    def apply_fool_action(fool_trick: List[int], fool_player, tricks: List[Tuple[int, List[int]]]) -> int:
+    def apply_fool_action(fool_trick: List[int], fool_player, tricks: List[Tuple[int, List[int]]]) -> Optional[int]:
         """
         Applies the Fool card action by removing it from the hand.
         Returns the updated hand after removing the Fool card.
@@ -67,9 +67,6 @@ class Action:
         if substitute_card:
             fool_trick.append(substitute_card)
             tricks.append((fool_player, [Const.FOOL]))
-        else:
-            raise ValueError(
-                f"No substitute card found in tricks for player {fool_player}")
         return substitute_card
 
     @staticmethod

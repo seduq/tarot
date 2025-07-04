@@ -112,8 +112,8 @@ MASK_PHASE_SIZE = 1
 MASK_SIZE = [
     MASK_DECK_SIZE,
     MASK_TAKER_KNOW_CARDS_SIZE,
-    MASK_NUM_TRICK_SIZE,
     MASK_NUM_TRICKS_SIZE,
+    MASK_NUM_TRICK_SIZE,
     MASK_CURRENT_PLAYER_SIZE,
     MASK_TAKER_PLAYER_SIZE,
     MASK_BID_SIZE,
@@ -123,7 +123,7 @@ MASK_SIZE = [
 
 MASK = {
     'played_cards': 0,
-    'taker_know_cards': 1,
+    'taker_chien_hand': 1,
     'played_tricks': 2,
     'current_trick': 3,
     'current_player': 4,
