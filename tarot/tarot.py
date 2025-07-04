@@ -37,7 +37,8 @@ class Tarot:
         elif self.phase == Phase.CHIEN:
             return Action.legal_chien_actions(self.hands[self.current])
         elif self.phase == Phase.TRICK:
-            return Action.legal_trick_actions(self.hands[self.current], self.trick)
+            return Action.legal_trick_actions(
+                self.hands[self.current], self.trick)
         elif self.phase == Phase.DECLARE:
             chelem_declared, poignee_declared = self.declared[-1]
             if not chelem_declared:
@@ -45,8 +46,6 @@ class Tarot:
             if not poignee_declared:
                 return [Const.DECLARE_POIGNEE, Const.DECLARE_NONE]
             return [Const.DECLARE_NONE]
-        elif self.phase == Phase.TRICK_FINISHED:
-            return [Const.TRICK_FINISHED]
         elif self.phase == Phase.END:
             return []
         else:
@@ -85,17 +84,24 @@ class Tarot:
                 self.chien = self.discard.copy()
                 self.discard.clear()
         elif self.phase == Phase.TRICK:
-            # Don't apply trick action if it's TRICK_FINISHED
-            if action != Const.TRICK_FINISHED:
-                trick_winner = Action.apply_trick_action(
-                    self.current, self.hands[self.current], self.trick, action)
-                self.update_played_cards(action)
-                if trick_winner:
-                    self.tricks.append(trick_winner)
-                if action == Const.FOOL:
-                    self.fool_player = self.current
-                    self.fool_state = Const.FOOL_NOT_PAID
-                    self.fool_trick = self.trick
+            trick_winner = Action.apply_trick_action(
+                self.current, self.hands[self.current], self.trick, action)
+            self.update_played_cards(action)
+            if action == Const.FOOL:
+                self.fool_player = self.current
+                self.fool_state = Const.FOOL_NOT_PAID
+                self.fool_trick = self.trick
+
+            if trick_winner is None:
+                return
+
+            self.tricks.append(trick_winner)
+            self.update_played_tricks(trick_winner)
+            if len(self.tricks) < Const.NUM_TRICKS:
+                self.trick = [-1] * Const.NUM_PLAYERS
+            if len(self.tricks) == Const.NUM_TRICKS:
+                self.update_fool_trick()
+                self.phase = Phase.END
         elif self.phase == Phase.DECLARE:
             if action == Const.DECLARE_CHELEM:
                 if not self.chelem_declared_taker and self.current == self.taker:
@@ -113,8 +119,6 @@ class Tarot:
             elif not poignee:
                 poignee = True
             self.declared[-1] = (chelem, poignee)
-        elif self.phase == Phase.TRICK_FINISHED:
-            return
         else:
             raise ValueError(
                 f"Phase {self.phase} does not support applying actions")
@@ -143,8 +147,12 @@ class Tarot:
             cards_played = len([card for card in self.trick if card != -1])
             if cards_played < Const.NUM_PLAYERS:
                 self.next_player()
-            else:
-                self.phase = Phase.TRICK_FINISHED
+                return
+
+            trick_winner = self.tricks[-1] if self.tricks else None
+            if trick_winner is None:
+                raise ValueError("No trick winner found")
+                self.phase = Phase.END
         elif self.phase == Phase.DECLARE:
             chelem, poignee = self.declared[-1]
             if chelem and poignee:
@@ -154,33 +162,6 @@ class Tarot:
                     self.trick = [-1] * Const.NUM_PLAYERS
                 self.next_player()
                 self.declared.append((False, False))
-        elif self.phase == Phase.TRICK_FINISHED:
-            trick_winner = self.tricks[-1] if self.tricks else None
-            if trick_winner is None:
-                raise ValueError("No trick winner found")
-            self.update_played_tricks(trick_winner)
-            if len(self.tricks) < Const.NUM_TRICKS:
-                self.phase = Phase.TRICK
-                self.trick = [-1] * Const.NUM_PLAYERS
-            else:
-                # Game is over - we have all 18 tricks
-                if len(self.tricks) == Const.NUM_TRICKS and self.fool_player is not None:
-                    substitute_card = Action.apply_fool_action(
-                        self.fool_trick, self.fool_player, self.tricks)
-                    if substitute_card is None:
-                        if self.fool_player == self.taker:
-                            raise ValueError(
-                                "No substitute card found for Fool in taker's tricks")
-                        substitute_card = next(c for (player, trick) in self.tricks for c in trick if Card.value(
-                            c) == 0.5 and player != self.fool_player and player != self.taker)
-
-                    idx = self.played_tricks.index(Const.FOOL)
-                    sub_idx = self.played_tricks.index(substitute_card)
-                    self.played_tricks[sub_idx] = -1
-                    self.played_tricks[idx] = substitute_card
-                    self.update_played_tricks(
-                        (self.fool_player, [Const.FOOL, -1, -1, -1]))
-                self.phase = Phase.END
         elif self.phase == Phase.END:
             pass
 
@@ -228,6 +209,25 @@ class Tarot:
         for card in self.discard:
             card_idx = Card.to_idx(card)
             self.played_cards[card_idx] = Const.CHIEN_ID
+
+    def update_fool_trick(self) -> None:
+
+        if self.fool_player is not None:
+            substitute_card = Action.apply_fool_action(
+                self.fool_trick, self.fool_player, self.tricks)
+            if substitute_card is None:
+                if self.fool_player == self.taker:
+                    raise ValueError(
+                        "No substitute card found for Fool in taker's tricks")
+                substitute_card = next(c for (player, trick) in self.tricks for c in trick if Card.value(
+                    c) == 0.5 and player != self.fool_player and player != self.taker)
+
+            idx = self.played_tricks.index(Const.FOOL)
+            sub_idx = self.played_tricks.index(substitute_card)
+            self.played_tricks[sub_idx] = -1
+            self.played_tricks[idx] = substitute_card
+            self.update_played_tricks(
+                (self.fool_player, [Const.FOOL, -1, -1, -1]))
 
     def is_chance_node(self) -> bool:
         """

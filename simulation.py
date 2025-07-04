@@ -1,6 +1,6 @@
 from tarot import Tarot
 from tarot.mcts import TarotISMCTSAgent, ISMCTSStrategy
-from tarot.constants import Phase, TRICK_FINISHED
+from tarot.constants import Phase
 import random
 import time
 import psutil
@@ -193,31 +193,25 @@ class StrategyAgent:
         self.metrics.sample_memory()
 
         if self.strategy_type == StrategyType.RANDOM:
-            action = random.choice(
-                legal_actions) if legal_actions else TRICK_FINISHED
+            action = random.choice(legal_actions)
 
         elif self.strategy_type == StrategyType.MAX_CARD:
             # Choose the highest valued card when possible
             if state.phase == Phase.TRICK:
-                action = max(
-                    legal_actions) if legal_actions else TRICK_FINISHED
+                action = max(legal_actions)
             else:
-                action = random.choice(
-                    legal_actions) if legal_actions else TRICK_FINISHED
+                action = random.choice(legal_actions)
 
         elif self.strategy_type == StrategyType.MIN_CARD:
             # Choose the lowest valued card when possible
             if state.phase == Phase.TRICK:
-                action = min(
-                    legal_actions) if legal_actions else TRICK_FINISHED
+                action = min(legal_actions)
             else:
-                action = random.choice(
-                    legal_actions) if legal_actions else TRICK_FINISHED
+                action = random.choice(legal_actions)
 
         else:
             # Should not reach here for base strategies
-            action = random.choice(
-                legal_actions) if legal_actions else TRICK_FINISHED
+            action = random.choice(legal_actions)
 
         decision_time = time.time() - start_time
         self.metrics.add_decision(
@@ -360,11 +354,6 @@ def play_with_strategy(strategy_type: StrategyType, verbose: bool = True, iterat
             if state.current == 0:
                 if state.phase == Phase.TRICK:
                     agent.metrics.cards_played += 1
-
-                # Count tricks (when trick is completed)
-                if (state.phase == Phase.TRICK_FINISHED or
-                        (state.phase == Phase.TRICK and len([c for c in state.trick if c != -1]) == 4)):
-                    agent.metrics.tricks_played += 1
 
         if verbose:
             print(f'Taking action {action} {state.action_to_string(action)}')
@@ -524,7 +513,7 @@ def main():
         strategies=[StrategyType.IS_MCTS_PER_TRICK],
         iterations=200,  # MCTS iterations per decision
         games_per_strategy=1,  # Number of games per strategy
-        verbose=False  # Set to True for detailed output
+        verbose=True  # Set to True for detailed output
     )
 
     print(f"\n{'='*80}")

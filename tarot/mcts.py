@@ -9,7 +9,7 @@ from dataclasses import dataclass
 
 from .tarot import Tarot
 from .constants import Phase
-from . import constants as Const, Phase
+from . import constants as Const
 from .cards import Card
 
 
@@ -26,11 +26,14 @@ class TarotInformationSet:
     current_player: int  # Whose turn it is
 
     def __hash__(self):
+        # Use more stable hash that doesn't depend on exact trick order
+        # Only consider essential information for decision-making
         return hash((
             self.player,
             tuple(sorted(self.hand)),
             tuple(self.played_cards),
-            tuple(self.current_trick),
+            # Only non-empty cards
+            tuple(sorted(card for card in self.current_trick if card != -1)),
             tuple(self.tricks_won),
             self.phase,
             self.taker,
@@ -131,12 +134,7 @@ class TarotISMCTSAgent:
         if game_state.phase != Phase.TRICK:
             # For non-trick phases, return a random legal action or handle Const.TRICK_FINISHED
             legal_actions = game_state.legal_actions()
-            if game_state.phase == Phase.TRICK_FINISHED:
-                return Const.TRICK_FINISHED
-            elif legal_actions:
-                return random.choice(legal_actions)
-            else:
-                return Const.TRICK_FINISHED
+            return random.choice(legal_actions)
 
         if self.use_multiple_determinization:
             if self.determinization_strategy == ISMCTSStrategy.PER_TRICK:
@@ -175,7 +173,7 @@ class TarotISMCTSAgent:
 
         # Fallback to random action
         legal_actions = game_state.legal_actions()
-        return random.choice(legal_actions) if legal_actions else Const.TRICK_FINISHED
+        return random.choice(legal_actions)
 
     def _get_action_single_determinization(self, game_state: Tarot) -> int:
         """Original single determinization approach"""
@@ -194,7 +192,7 @@ class TarotISMCTSAgent:
 
         # Fallback to random action
         legal_actions = game_state.legal_actions()
-        return random.choice(legal_actions) if legal_actions else Const.TRICK_FINISHED
+        return random.choice(legal_actions)
 
     def _get_action_per_trick_determinization(self, game_state: Tarot) -> int:
         """Get best action using per-trick determinization strategy"""
@@ -230,19 +228,20 @@ class TarotISMCTSAgent:
 
         # Fallback to random action
         legal_actions = game_state.legal_actions()
-        return random.choice(legal_actions) if legal_actions else Const.TRICK_FINISHED
+        return random.choice(legal_actions)
 
     def _should_redeterminize(self, game_state: Tarot) -> bool:
         """Check if we should create new determinizations for French Tarot"""
         # Redeterminize if:
         # 1. No determinizations exist yet
-        # 2. We're starting a new trick (trick is empty)
+        # 2. We're starting a new trick (trick is empty or all -1)
         # 3. Game state has changed significantly from last determinization
 
         if not self.current_trick_determinizations:
             return True
 
-        if len(game_state.trick) == 0:
+        # Check if trick is empty (all cards are -1)
+        if all(card == -1 for card in game_state.trick):
             return True
 
         # Check if this is the same trick state as when we last determinized
@@ -300,15 +299,15 @@ class TarotISMCTSAgent:
                                for hand in determinized_state.hands]
 
         # Remove cards that have been played in this trick from hands
-        for i, card in enumerate(current_state.trick):
-            if card != -1:  # Card has been played
-                player_who_played = i
-                if card in updated_state.hands[player_who_played]:
-                    updated_state.hands[player_who_played].remove(card)
+        # In the trick array, trick[player] = card played by that player
+        for player, card in enumerate(current_state.trick):
+            if card != -1:  # Card has been played by this player
+                if card in updated_state.hands[player]:
+                    updated_state.hands[player].remove(card)
 
         # Ensure my hand matches exactly
-        updated_state.hands[self.player_id] = current_state.hands[self.player_id].copy(
-        )
+        updated_state.hands[self.player_id] = (current_state.hands[self.player_id]
+                                               .copy())
 
         return updated_state
 
@@ -329,30 +328,50 @@ class TarotISMCTSAgent:
     def _simulate(self, game_state: Tarot, root_info_set: TarotInformationSet):
         """Run one MCTS simulation"""
         path = []
+        current_state = game_state.clone()
 
-        # Just do a quick simulation for the TRICK phase
-        if game_state.phase == Phase.TRICK and game_state.current == self.player_id:
-            info_set = self._get_information_set(game_state)
+        # Selection and expansion phase
+        while not current_state.is_terminal():
+            if current_state.current == self.player_id:
+                # This is our decision node
+                info_set = self._get_information_set(current_state)
 
-            if info_set not in self.tree:
-                self.tree[info_set] = TarotISMCTSNode(info_set)
-                self.total_nodes_created += 1
-                self.nodes_created_this_decision += 1
+                if info_set not in self.tree:
+                    # Create new node and stop selection
+                    self.tree[info_set] = TarotISMCTSNode(info_set)
+                    self.total_nodes_created += 1
+                    self.nodes_created_this_decision += 1
+                    break
 
-            node = self.tree[info_set]
-            action = self._select_action(game_state, node)
-            path.append((node, action))
+                node = self.tree[info_set]
+                action = self._select_action(current_state, node)
+                path.append((node, action))
 
-            if action not in node.children:
-                # Expansion
-                new_info_set = self._get_information_set(game_state)
-                node.children[action] = TarotISMCTSNode(
-                    new_info_set, node, action)
-                self.total_nodes_created += 1
-                self.nodes_created_this_decision += 1
+                if action not in node.children:
+                    # Expansion - create child node
+                    current_state.apply_action(action)
+                    current_state.next()
+                    new_info_set = self._get_information_set(current_state)
+                    node.children[action] = TarotISMCTSNode(
+                        new_info_set, node, action)
+                    self.total_nodes_created += 1
+                    self.nodes_created_this_decision += 1
+                    break
+                else:
+                    # Continue selection
+                    current_state.apply_action(action)
+                    current_state.next()
+            else:
+                # Opponent's turn - simulate random action
+                legal_actions = current_state.legal_actions()
+                if not legal_actions:
+                    break
+                action = random.choice(legal_actions)
+                current_state.apply_action(action)
+                current_state.next()
 
-        # Simple rollout and reward
-        final_state = self._rollout(game_state)
+        # Rollout phase
+        final_state = self._rollout(current_state)
         reward = self._get_reward(final_state)
 
         # Backpropagation
@@ -389,7 +408,7 @@ class TarotISMCTSAgent:
                     best_value = value
                     best_action = action
 
-        return best_action or random.choice(legal_actions) if legal_actions else Const.TRICK_FINISHED
+        return best_action or random.choice(legal_actions)
 
     def _calculate_ucb_rave_value(self, node: TarotISMCTSNode, action: int) -> float:
         """Calculate UCB1 + RAVE value for an action"""
@@ -459,7 +478,8 @@ class TarotISMCTSAgent:
         # What we know for certain
         my_hand = game_state.hands[self.player_id]
         played_cards_set = set(
-            Card.from_idx(card) for card, player in enumerate(game_state.played_cards) if player != -1)
+            Card.from_idx(card) for card, player
+            in enumerate(game_state.played_cards) if player != -1)
         current_trick_cards = set(
             card for card in game_state.trick if card != -1)
         taker_know_cards = game_state.taker_chien_hand
@@ -487,7 +507,10 @@ class TarotISMCTSAgent:
         # we need to adjust the cards to account for the chien
         if (determinized_state.taker_bid == Const.BID_GARDE_SANS
                 or determinized_state.taker_bid == Const.BID_GARDE_CONTRE):
+            # In garde sans/contre, chien cards are not revealed but count for taker
+            # Remove chien-sized portion from unknown cards
             unknown_cards = unknown_cards[Const.CHIEN_SIZE:]
+
         for player in range(Const.NUM_PLAYERS):
             if player != self.player_id:
                 original_hand_size = len(game_state.hands[player])
@@ -495,15 +518,21 @@ class TarotISMCTSAgent:
                 # Add cards that are known to the taker
                 # Except the played cards
                 if determinized_state.taker == player:
-                    determinized_state.hands[player] = list(
-                        set(taker_know_cards).difference(played_cards_set))
-                    original_hand_size = (
-                        original_hand_size - len(determinized_state.hands[player]))
+                    # Taker knows chien cards (except in garde sans/contre)
+                    known_cards = []
+                    if determinized_state.taker_bid < Const.BID_GARDE_SANS:
+                        known_cards = list(
+                            set(taker_know_cards).difference(played_cards_set))
+                    determinized_state.hands[player] = known_cards
+                    original_hand_size = max(
+                        0, original_hand_size - len(known_cards))
                 else:
                     determinized_state.hands[player] = []
 
-                # Give this player the right number of cards
-                for _ in range(original_hand_size):
+                # Give this player the right number of remaining cards
+                cards_to_add = min(original_hand_size, len(
+                    unknown_cards) - card_index)
+                for _ in range(cards_to_add):
                     if card_index < len(unknown_cards):
                         determinized_state.hands[player].append(
                             unknown_cards[card_index])
