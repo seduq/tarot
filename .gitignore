@@ -195,6 +195,6 @@ cython_debug/
 
 
 article/
-plots*/
+plot*/
 ris_mcts_results_*.csv
 ris_mcts_results_*.txt

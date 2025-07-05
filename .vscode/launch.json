@@ -17,6 +17,14 @@
             "request": "launch",
             "program": "${file}",
             "console": "integratedTerminal"
+        },
+        {
+            "name": "Run Quick Analysis",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "run_analysis.py",
+            "console": "integratedTerminal",
+            "args": ["--quick"]
         }
     ]
 }

@@ -141,6 +141,7 @@
     "RISMCTS",
     "Rizz",
     "scipy",
+    "seaborn",
     "setuptools",
     "testpaths"
   ],

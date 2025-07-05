@@ -223,7 +223,11 @@ class StrategyAgent:
 class MCTSStrategyAgent(StrategyAgent):
     """MCTS Strategy Agent using IS-MCTS"""
 
-    def __init__(self, player_id: int, strategy_type: StrategyType, iterations: int = 1000):
+    def __init__(self,
+                 player_id: int,
+                 strategy_type: StrategyType,
+                 iterations: int = 300,
+                 num_determinizations: int = 1):
         super().__init__(player_id, strategy_type)
         self.iterations = iterations
 
@@ -232,13 +236,14 @@ class MCTSStrategyAgent(StrategyAgent):
             self.mcts_agent = TarotISMCTSAgent(
                 player_id=player_id,
                 iterations=iterations,
-                multiple_determinization=False
+                multiple_determinization=False,
             )
         elif strategy_type == StrategyType.IS_MCTS_PER_ACTION:
             self.mcts_agent = TarotISMCTSAgent(
                 player_id=player_id,
                 iterations=iterations,
                 multiple_determinization=True,
+                num_determinizations=num_determinizations,
                 strategy=ISMCTSStrategy.PER_ACTION
             )
         elif strategy_type == StrategyType.IS_MCTS_PER_TRICK:
@@ -246,6 +251,7 @@ class MCTSStrategyAgent(StrategyAgent):
                 player_id=player_id,
                 iterations=iterations,
                 multiple_determinization=True,
+                num_determinizations=num_determinizations,
                 strategy=ISMCTSStrategy.PER_TRICK
             )
 
@@ -277,7 +283,10 @@ class MCTSStrategyAgent(StrategyAgent):
         return action
 
 
-def create_agent(player_id: int, strategy_type: StrategyType, iterations: int = 1000) -> StrategyAgent:
+def create_agent(player_id: int,
+                 strategy_type: StrategyType,
+                 iterations: int = 300,
+                 num_determinizations=20,) -> StrategyAgent:
     """Factory function to create appropriate agent"""
     if strategy_type in [StrategyType.IS_MCTS_SINGLE, StrategyType.IS_MCTS_PER_ACTION, StrategyType.IS_MCTS_PER_TRICK]:
         return MCTSStrategyAgent(player_id, strategy_type, iterations)
@@ -285,16 +294,19 @@ def create_agent(player_id: int, strategy_type: StrategyType, iterations: int = 
         return StrategyAgent(player_id, strategy_type)
 
 
-def play_with_strategy(strategy_type: StrategyType, verbose: bool = True, iterations: int = 1000) -> GameMetrics:
+def play_with_strategy(strategy_type: StrategyType,
+                       verbose: bool = True,
+                       iterations: int = 300,
+                       num_determinizations=20,) -> GameMetrics:
     """Play a single game with the specified strategy"""
     state = Tarot()
     random.seed(SEED)
 
     # Create agent for player 0 (we'll track this player's metrics)
-    agent = create_agent(0, strategy_type, iterations)
+    agent = create_agent(0, strategy_type, iterations, num_determinizations)
 
     # Create simple random agents for other players
-    other_agents = [create_agent(i, StrategyType.RANDOM, 100)
+    other_agents = [create_agent(i, StrategyType.RANDOM)
                     for i in range(1, 4)]
     all_agents = [agent] + other_agents
     random.shuffle(all_agents)
@@ -307,7 +319,7 @@ def play_with_strategy(strategy_type: StrategyType, verbose: bool = True, iterat
         print("=" * 50)
 
     iteration = 0
-    while not state.is_terminal() and iteration < 500:  # Limit iterations for safety
+    while not state.is_terminal() and iteration < 100:  # Limit iterations for safety
         iteration += 1
 
         if verbose:
@@ -488,11 +500,6 @@ def print_strategy_comparison(results: Dict[str, Any]):
               f"{tree_created_str:<10}")
 
 
-def play(verbose: bool = True):
-    """Original play function for backward compatibility"""
-    return play_with_strategy(StrategyType.RANDOM, verbose)
-
-
 def main():
     """Main function to run comprehensive strategy comparison"""
     print("French Tarot Strategy Comparison")
@@ -510,9 +517,9 @@ def main():
 
     # Run comparison
     results = compare_strategies(
-        strategies=[StrategyType.IS_MCTS_PER_TRICK],
+        strategies=strategies,
         iterations=200,  # MCTS iterations per decision
-        games_per_strategy=1,  # Number of games per strategy
+        games_per_strategy=20,  # Number of games per strategy
         verbose=True  # Set to True for detailed output
     )
 

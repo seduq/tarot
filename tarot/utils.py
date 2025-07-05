@@ -25,13 +25,12 @@ class Utils:
         """
         score = Utils.total_score(
             tricks, chien, bid, chelem, poignee, petit)
-        points = 1 / (Const.NUM_PLAYERS - 1)
         board = [0.0] * Const.NUM_PLAYERS
-        taker_won = 1.0 if score > 0 else -1.0
+        taker_won = 1.0 if score > 0 else 0.0
         board[taker] = taker_won
         for player in range(Const.NUM_PLAYERS):
             if player != taker:
-                board[player] = - points * taker_won
+                board[player] = 1.0 - taker_won
         return score, board
 
     @staticmethod
