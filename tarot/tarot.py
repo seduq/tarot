@@ -9,8 +9,7 @@ from .constants import Phase
 
 class Tarot:
     def __init__(self,):
-        self.deck = Card.deck()
-        self.chien, self.hands = Card.deal(self.deck)
+        self.chien, self.hands = Card.deal(Card.deck())
         self.phase = Phase.BIDDING
         self.bids: List[int] = []
         self.taker: int = -1
@@ -21,15 +20,13 @@ class Tarot:
         self.trick: List[int] = [-1] * Const.NUM_PLAYERS
         self.played_cards: List[int] = [-1] * Const.DECK_SIZE
         self.played_tricks: List[int] = [-1] * (Const.MASK_NUM_TRICKS_SIZE)
-        self.taker_chien_hand: List[int] = []
+        self.taker_chien_hand: List[int] = [-1] * Const.HAND_SIZE
         self.declared: List[Tuple[bool, bool]] = [(False, False)]
         self.chelem_declared_defenders = False
         self.poignee_declared_defenders = False
         self.chelem_declared_taker = False
         self.poignee_declared_taker = False
-        self.fool_state = Const.FOOL_NOT_PLAYED
-        self.fool_player = -1
-        self.fool_trick = []
+        self.fool_paid = False
 
     def legal_actions(self) -> List[int]:
         if self.phase == Phase.BIDDING:
@@ -87,10 +84,9 @@ class Tarot:
             trick_winner = Action.apply_trick_action(
                 self.current, self.hands[self.current], self.trick, action)
             self.update_played_cards(action)
-            if action == Const.FOOL:
-                self.fool_player = self.current
-                self.fool_state = Const.FOOL_NOT_PAID
-                self.fool_trick = self.trick
+
+            if self.current == self.taker and action in self.taker_chien_hand:
+                self.taker_chien_hand.remove(action)
 
             if trick_winner is None:
                 return
@@ -152,7 +148,6 @@ class Tarot:
             trick_winner = self.tricks[-1] if self.tricks else None
             if trick_winner is None:
                 raise ValueError("No trick winner found")
-                self.phase = Phase.END
         elif self.phase == Phase.DECLARE:
             chelem, poignee = self.declared[-1]
             if chelem and poignee:
@@ -166,8 +161,11 @@ class Tarot:
             pass
 
     def returns(self) -> List[float]:
+        # If something went wrong, return 0 for all players
         if self.tricks == []:
-            return [0.25] * Const.NUM_PLAYERS
+            return [0] * Const.NUM_PLAYERS
+        if not self.fool_paid:
+            return [0] * Const.NUM_PLAYERS
         last_trick_winner, last_trick = self.tricks[-1]
         petit = False
         if Const.PETIT in last_trick and last_trick_winner == self.taker:
@@ -211,23 +209,28 @@ class Tarot:
             self.played_cards[card_idx] = Const.CHIEN_ID
 
     def update_fool_trick(self) -> None:
+        """
+        Updates the trick history where the Fool card was played.
+        It substitutes a card from another trick of the team.
+        """
+        fool_tricks = [trick for trick in self.tricks if Const.FOOL in trick]
+        if not fool_tricks:
+            return
+        _, fool_trick = fool_tricks[-1]
+        fool_player = fool_trick.index(Const.FOOL)
 
-        if self.fool_player is not None:
+        if fool_player > -1:
             substitute_card = Action.apply_fool_action(
-                self.fool_trick, self.fool_player, self.tricks)
+                fool_trick, fool_player, self.taker == fool_player, self.tricks)
             if substitute_card is None:
-                if self.fool_player == self.taker:
-                    raise ValueError(
-                        "No substitute card found for Fool in taker's tricks")
-                substitute_card = next(c for (player, trick) in self.tricks for c in trick if Card.value(
-                    c) == 0.5 and player != self.fool_player and player != self.taker)
-
+                return
             idx = self.played_tricks.index(Const.FOOL)
             sub_idx = self.played_tricks.index(substitute_card)
             self.played_tricks[sub_idx] = -1
             self.played_tricks[idx] = substitute_card
             self.update_played_tricks(
-                (self.fool_player, [Const.FOOL, -1, -1, -1]))
+                (fool_player, [Const.FOOL, -1, -1, -1]))
+            self.fool_paid = True
 
     def is_chance_node(self) -> bool:
         """
@@ -244,7 +247,7 @@ class Tarot:
     def next_player(self) -> None:
         self.current = (self.current + 1) % Const.NUM_PLAYERS
 
-    def tensor(self) -> List[int]:
+    def tensor(self, player: int) -> List[int]:
         for hand in self.hands:
             hand.sort()
 
@@ -252,26 +255,21 @@ class Tarot:
         if self.trick:
             for i, card in enumerate(self.trick):
                 current_trick[i] = card
-        taker_know_cards = [-1] * Const.HAND_SIZE
-        if self.taker >= 0:
-            for i, card in enumerate(self.taker_chien_hand):
-                taker_know_cards[i] = card
 
-        tensor = [*self.played_cards, *taker_know_cards,
+        taker_know_cards = [-1] * Const.HAND_SIZE
+        player_know_cards = [-1] * Const.DECK_SIZE
+        if player > -1:
+            for card in self.hands[player]:
+                idx = Card.to_idx(card)
+                player_know_cards[idx] = player
+
+        tensor = [*self.played_cards, *player_know_cards,
+                  *taker_know_cards,
                   *self.played_tricks, *current_trick,
                   self.current, self.taker, *self.bids,
                   self.chelem_declared_taker, self.chelem_declared_defenders,
                   self.poignee_declared_taker, self.poignee_declared_defenders,
                   self.phase.value]
-        return tensor
-
-    def tensor_player(self, player: int) -> List[int]:
-        tensor = self.tensor()
-        played_cards = self.played_cards.copy()
-        for hand in self.hands[player]:
-            card_idx = Card.to_idx(hand)
-            played_cards[card_idx] = player
-        tensor[:Const.DECK_SIZE] = played_cards
         return tensor
 
     def from_tensor(self, tensor: List[int]) -> None:
@@ -295,11 +293,13 @@ class Tarot:
 
     def clone(self):
         clone = Tarot()
-        clone.from_tensor(self.tensor())
+        clone.from_tensor(self.tensor(-1))
         clone.hands = [hand.copy() for hand in self.hands]
         clone.chien = self.chien.copy()
         clone.discard = self.discard.copy()
         clone.declared = self.declared.copy()
+        clone.taker_bid = self.taker_bid
+        clone.fool_paid = self.fool_paid
         return clone
 
     def action_to_string(self, action: int) -> str:

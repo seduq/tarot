@@ -98,6 +98,7 @@ FOOL_NOT_PAID = -2
 
 MASK_DECK_SIZE = DECK_SIZE
 MASK_TAKER_KNOW_CARDS_SIZE = HAND_SIZE
+MASK_HANDS_SIZE = DECK_SIZE
 MASK_NUM_TRICK_SIZE = NUM_PLAYERS
 MASK_NUM_TRICKS_SIZE = (MASK_NUM_TRICK_SIZE + 1) * (NUM_TRICKS + 1)
 MASK_CURRENT_PLAYER_SIZE = 1
@@ -108,6 +109,7 @@ MASK_PHASE_SIZE = 1
 
 MASK_SIZE = [
     MASK_DECK_SIZE,
+    MASK_HANDS_SIZE,
     MASK_TAKER_KNOW_CARDS_SIZE,
     MASK_NUM_TRICKS_SIZE,
     MASK_NUM_TRICK_SIZE,
@@ -120,14 +122,15 @@ MASK_SIZE = [
 
 MASK = {
     'played_cards': 0,
-    'taker_chien_hand': 1,
-    'played_tricks': 2,
-    'current_trick': 3,
-    'current_player': 4,
-    'taker_player': 5,
-    'bids': 6,
-    'declarations': 7,
-    'phase': 8,
+    'know_hands': 1,
+    'taker_chien_hand': 2,
+    'played_tricks': 3,
+    'current_trick': 4,
+    'current_player': 5,
+    'taker_player': 6,
+    'bids': 7,
+    'declarations': 8,
+    'phase': 9,
 }
 
 TENSOR_SIZE = sum(MASK_SIZE)

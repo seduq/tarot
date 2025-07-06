@@ -133,6 +133,7 @@ class Utils:
         Get the mask slice in the tensor for the given mask name.
         Names:
         - 'played_cards': Played cards, each index is either player id or -1 (deck size)
+        - 'know_hands': Observable hands, each index is either player id or -1 (deck size)
         - 'taker_chien_hand': Know cards of the taker (hand size)
         - 'played_tricks': Known tricks of the player (1 + number of players) * (number of tricks + 1)
         - 'current_trick': Current trick being played (1 + number of players)
@@ -155,6 +156,7 @@ class Utils:
         Sets the mask slice in the tensor for the given mask name.
         Names:
         - 'played_cards': Played cards, each index is either player id or -1
+        - 'know_hands': Observable hands, each index is either player id or -1
         - 'taker_chien_hand': Know cards of the taker
         - 'played_tricks': Known tricks of the player
         - 'current_trick': Current trick being played

@@ -16,42 +16,19 @@ from .cards import Card
 @dataclass
 class TarotInformationSet:
     """Information set for French Tarot game"""
-    player: int
-    hand: List[int]  # Cards in player's hand
-    played_cards: List[int]  # Cards played by each player (-1 if unknown)
-    current_trick: List[int]  # Current trick cards
-    played_tricks: List[int]  # Number of tricks won by each player
-    phase: Phase
-    taker: int  # Who is the taker
-    current_player: int  # Whose turn it is
+    tensor: List[int]
 
     def __hash__(self):
         # Use more stable hash that doesn't depend on exact trick order
         # Only consider essential information for decision-making
         return hash((
-            self.player,
-            tuple(sorted(self.hand)),
-            tuple(self.played_cards),
-            tuple(self.current_trick),
-            tuple(self.played_tricks),
-            self.phase,
-            self.taker,
-            self.current_player
+            tuple(self.tensor)
         ))
 
     def __eq__(self, other):
         if not isinstance(other, TarotInformationSet):
             return False
-        return (
-            self.player == other.player and
-            sorted(self.hand) == sorted(other.hand) and
-            self.played_cards == other.played_cards and
-            self.current_trick == other.current_trick and
-            self.played_tricks == other.played_tricks and
-            self.phase == other.phase and
-            self.taker == other.taker and
-            self.current_player == other.current_player
-        )
+        return self.tensor == other.tensor
 
 
 class TarotISMCTSNode:
@@ -86,17 +63,18 @@ class TarotISMCTSAgent:
 
     def __init__(self,
                  player_id: int,
-                 iterations=1000,
+                 iterations=300,
                  exploration_constant=math.sqrt(2),
                  pw_alpha=0.5,
                  pw_constant=2.0,
                  rave_constant=200,
-                 num_determinizations=10,
+                 num_determinizations=50,
                  strategy: ISMCTSStrategy = ISMCTSStrategy.PER_TRICK):
 
         self.player_id = player_id
         self.iterations = iterations
         self.exploration_constant = exploration_constant
+
         # Maps information sets to nodes
         self.tree: Dict[TarotInformationSet, TarotISMCTSNode] = {}
 
@@ -216,10 +194,6 @@ class TarotISMCTSAgent:
 
     def _should_redeterminize(self, game_state: Tarot) -> bool:
         """Check if we should create new determinizations for French Tarot"""
-        # Redeterminize if:
-        # 1. No determinizations exist yet
-        # 2. We're starting a new trick (trick is empty or all -1)
-        # 3. Game state has changed significantly from last determinization
 
         if not self.current_trick_determinizations:
             return True
@@ -263,13 +237,10 @@ class TarotISMCTSAgent:
         updated_state.poignee_declared_defenders = determinized_state.poignee_declared_defenders
 
         # Update with current trick information
-        if current_state.phase == Phase.TRICK:
-            updated_state.trick = [-1] * Const.NUM_PLAYERS
-            # Copy existing cards from current trick
-            for i in range(min(len(current_state.trick), Const.NUM_PLAYERS)):
-                updated_state.trick[i] = current_state.trick[i]
-        else:
-            updated_state.trick = current_state.trick.copy() if current_state.trick else []
+        updated_state.trick = [-1] * Const.NUM_PLAYERS
+        # Copy existing cards from current trick
+        for i in range(Const.NUM_PLAYERS):
+            updated_state.trick[i] = current_state.trick[i]
 
         updated_state.tricks = current_state.tricks.copy()
         updated_state.played_cards = current_state.played_cards.copy()
@@ -293,16 +264,7 @@ class TarotISMCTSAgent:
 
     def _get_information_set(self, game_state: Tarot) -> TarotInformationSet:
         """Create information set for current player in French Tarot"""
-        return TarotInformationSet(
-            player=self.player_id,
-            hand=game_state.hands[self.player_id].copy(),
-            played_cards=game_state.played_cards.copy(),
-            current_trick=game_state.trick.copy(),
-            played_tricks=game_state.played_tricks.copy(),
-            phase=game_state.phase,
-            taker=game_state.taker,
-            current_player=game_state.current
-        )
+        return TarotInformationSet(game_state.tensor(-1))
 
     def _simulate(self, game_state: Tarot):
         """Run one MCTS simulation"""
@@ -471,10 +433,7 @@ class TarotISMCTSAgent:
         # Generate all possible cards and check which are unknown
         for card_idx in range(Const.DECK_SIZE):
             card = Card.from_idx(card_idx)
-            if (card not in my_hand and
-                card not in played_cards_set and
-                    card not in current_trick_cards and
-                    card not in taker_know_cards):
+            if (card not in my_hand and card not in played_cards_set and card not in current_trick_cards and card not in taker_know_cards):
                 unknown_cards.append(card)
 
         # Randomly distribute unknown cards to other players
@@ -499,10 +458,10 @@ class TarotISMCTSAgent:
                 if determinized_state.taker == player:
                     # Taker knows chien cards (except in garde sans/contre)
                     known_cards = []
-                    if determinized_state.taker_bid < Const.BID_GARDE_SANS:
-                        known_cards = list(
-                            set(taker_know_cards).difference(played_cards_set))
-                    determinized_state.hands[player] = known_cards
+                    if (determinized_state.taker_bid < Const.BID_GARDE_SANS and
+                            player == determinized_state.taker):
+                        known_cards = determinized_state.taker_chien_hand.copy()
+                        determinized_state.hands[player] = known_cards
                     original_hand_size = max(
                         0, original_hand_size - len(known_cards))
                 else:
@@ -516,6 +475,17 @@ class TarotISMCTSAgent:
                         determinized_state.hands[player].append(
                             unknown_cards[card_index])
                         card_index += 1
+
+        if self.determinization_strategy == ISMCTSStrategy.PER_TRICK:
+            # Finish the current trick and play the next one until it reaches the player's turn
+            while determinized_state.current != self.player_id:
+                # Apply a random legal action for the current player
+                legal_actions = determinized_state.legal_actions()
+                if not legal_actions:
+                    break
+                action = random.choice(legal_actions)
+                determinized_state.apply_action(action)
+                determinized_state.next()
 
         return determinized_state
 
@@ -597,34 +567,3 @@ class TarotISMCTSAgent:
             'total_trees_created': self.total_trees_created,
             'trees_created_this_decision': self.trees_created_this_decision
         }
-
-    def _calculate_max_depth(self) -> int:
-        """Calculate maximum depth of the tree"""
-        if not self.tree:
-            return 0
-
-        max_depth = 0
-        for node in self.tree.values():
-            depth = self._get_node_depth(node)
-            max_depth = max(max_depth, depth)
-
-        return max_depth
-
-    def _get_node_depth(self, node: TarotISMCTSNode) -> int:
-        """Get depth of a specific node"""
-        depth = 0
-        current = node
-        while current.parent is not None:
-            depth += 1
-            current = current.parent
-        return depth
-
-    def reset_tree(self):
-        """Reset the tree (useful for new games)"""
-        self.tree = {}
-        self.total_nodes_created = 0
-        self.total_simulations_run = 0
-        self.nodes_created_this_decision = 0
-        self.simulations_this_decision = 0
-        self.total_trees_created = 0
-        self.trees_created_this_decision = 0

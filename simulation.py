@@ -1,6 +1,7 @@
 from tarot import Tarot
 from tarot.mcts import TarotISMCTSAgent, ISMCTSStrategy
 from tarot.constants import Phase
+from tarot import Const
 import random
 import time
 import psutil
@@ -361,7 +362,8 @@ def create_agent(player_id: int,
 def play_with_strategy(strategy_type: StrategyType,
                        verbose: bool = True,
                        iterations: int = 300,
-                       num_determinizations=20,) -> GameMetrics:
+                       num_determinizations: int = 20,
+                       position: int = 0) -> GameMetrics:
     """Play a single game with the specified strategy"""
     state = Tarot()
     random.seed(SEED)
@@ -370,15 +372,18 @@ def play_with_strategy(strategy_type: StrategyType,
     agent = create_agent(0, strategy_type, iterations, num_determinizations)
 
     # Create simple random agents for other players
-    other_agents = [create_agent(i, StrategyType.RANDOM)
-                    for i in range(1, 4)]
-    all_agents = [agent] + other_agents
-
-    # Shuffle agents to randomize player order
-    random.shuffle(all_agents)
+    agents = [create_agent(i, StrategyType.RANDOM)
+              for i in range(Const.NUM_PLAYERS - 1)]
+    if position < 3:
+        agents.insert(position, agent)  # Add our strategy agent last
+    else:
+        agents.append(agent)  # Add our strategy agent first
 
     # Assign strategy agent's player ID
-    agent.player_id = all_agents.index(agent)
+    agent.player_id = agents.index(agent)
+
+    for i, a in enumerate(agents):
+        print(f"Player {i} using strategy: {a.strategy_type.value}")
 
     game_start_time = time.time()
 
@@ -428,7 +433,7 @@ def play_with_strategy(strategy_type: StrategyType,
                 break
 
             # Get action from appropriate agent
-            current_agent = all_agents[state.current]
+            current_agent = agents[state.current]
             action = current_agent.get_action(state)
 
             # Track additional metrics for our main agent
@@ -490,7 +495,7 @@ def compare_strategies(strategies: List[StrategyType], iterations: int = 500, ga
 
             metrics = play_with_strategy(
                 strategy, verbose=verbose, iterations=iterations,
-                num_determinizations=determinizations)
+                num_determinizations=determinizations, position=game_num % 4)
             strategy_metrics.append(metrics)
 
         # Aggregate metrics across games
@@ -664,9 +669,9 @@ def main():
 
     # Define strategies to test
     strategies = [
-        StrategyType.RANDOM,
-        StrategyType.MAX_CARD,
-        StrategyType.MIN_CARD,
+        # StrategyType.RANDOM,
+        # StrategyType.MAX_CARD,
+        # StrategyType.MIN_CARD,
         StrategyType.IS_MCTS_PER_ACTION,
         StrategyType.IS_MCTS_PER_TRICK
     ]
@@ -676,7 +681,7 @@ def main():
         strategies=strategies,
         iterations=200,  # MCTS iterations per decision
         games_per_strategy=20,  # Number of games per strategy
-        verbose=True  # Set to True for detailed output
+        verbose=False  # Set to True for detailed output
     )
 
     print(f"\n{'='*80}")

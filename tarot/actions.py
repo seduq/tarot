@@ -46,7 +46,7 @@ class Action:
         return trick_winner
 
     @staticmethod
-    def apply_fool_action(fool_trick: List[int], fool_player, tricks: List[Tuple[int, List[int]]]) -> Optional[int]:
+    def apply_fool_action(fool_trick: List[int], fool_player: int, taker: int, tricks: List[Tuple[int, List[int]]]) -> Optional[int]:
         """
         Applies the Fool card action by removing it from the hand.
         Returns the updated hand after removing the Fool card.
@@ -54,10 +54,13 @@ class Action:
         if Const.FOOL not in fool_trick:
             raise ValueError(
                 f"Fool card {Const.FOOL} not in trick: {fool_trick}")
-        fool_trick.remove(Const.FOOL)
+
         substitute_card = None
         use_tricks = [trick for (player, trick)
                       in tricks if player == fool_player]
+        if not use_tricks and fool_player != taker:
+            use_tricks = [trick for player, trick in tricks for c in trick if Card.value(
+                c) == 0.5 and player != fool_player and player != taker and Const.FOOL not in trick]
         for idx, current_trick in enumerate(use_tricks):
             if any(Card.value(card) == 0.5 for card in current_trick):
                 substitute_card = next(card for card
@@ -65,6 +68,7 @@ class Action:
                 current_trick.remove(substitute_card)
                 break
         if substitute_card:
+            fool_trick.remove(Const.FOOL)
             fool_trick.append(substitute_card)
             tricks.append((fool_player, [Const.FOOL]))
         return substitute_card
