@@ -20,7 +20,7 @@ class TarotInformationSet:
     hand: List[int]  # Cards in player's hand
     played_cards: List[int]  # Cards played by each player (-1 if unknown)
     current_trick: List[int]  # Current trick cards
-    tricks_won: List[int]  # Number of tricks won by each player
+    played_tricks: List[int]  # Number of tricks won by each player
     phase: Phase
     taker: int  # Who is the taker
     current_player: int  # Whose turn it is
@@ -32,23 +32,26 @@ class TarotInformationSet:
             self.player,
             tuple(sorted(self.hand)),
             tuple(self.played_cards),
-            # Only non-empty cards
-            tuple(sorted(card for card in self.current_trick if card != -1)),
-            tuple(self.tricks_won),
+            tuple(self.current_trick),
+            tuple(self.played_tricks),
             self.phase,
             self.taker,
             self.current_player
         ))
 
     def __eq__(self, other):
-        return (self.player == other.player and
-                sorted(self.hand) == sorted(other.hand) and
-                self.played_cards == other.played_cards and
-                self.current_trick == other.current_trick and
-                self.tricks_won == other.tricks_won and
-                self.phase == other.phase and
-                self.taker == other.taker and
-                self.current_player == other.current_player)
+        if not isinstance(other, TarotInformationSet):
+            return False
+        return (
+            self.player == other.player and
+            sorted(self.hand) == sorted(other.hand) and
+            self.played_cards == other.played_cards and
+            self.current_trick == other.current_trick and
+            self.played_tricks == other.played_tricks and
+            self.phase == other.phase and
+            self.taker == other.taker and
+            self.current_player == other.current_player
+        )
 
 
 class TarotISMCTSNode:
@@ -89,8 +92,8 @@ class TarotISMCTSAgent:
                  pw_constant=2.0,
                  rave_constant=200,
                  num_determinizations=10,
-                 multiple_determinization=True,
                  strategy: ISMCTSStrategy = ISMCTSStrategy.PER_TRICK):
+
         self.player_id = player_id
         self.iterations = iterations
         self.exploration_constant = exploration_constant
@@ -106,7 +109,6 @@ class TarotISMCTSAgent:
 
         # Multiple determinization parameters
         self.num_determinizations = num_determinizations
-        self.use_multiple_determinization = multiple_determinization
         self.determinization_strategy = strategy
 
         # Per-trick determinization state
@@ -123,6 +125,10 @@ class TarotISMCTSAgent:
         self.total_trees_created = 0
         self.trees_created_this_decision = 0
 
+    def _get_key(self, game_state: Tarot) -> str:
+        """Get a unique key for the tricks game state"""
+        return str(game_state.played_tricks) + str(game_state.trick)
+
     def get_action(self, game_state: Tarot) -> int:
         """Get the best action using IS-MCTS with multiple determinization"""
         # Reset per-decision counters
@@ -136,15 +142,12 @@ class TarotISMCTSAgent:
             legal_actions = game_state.legal_actions()
             return random.choice(legal_actions)
 
-        if self.use_multiple_determinization:
-            if self.determinization_strategy == ISMCTSStrategy.PER_TRICK:
-                return self._get_action_per_trick_determinization(game_state)
-            else:
-                return self._get_action_multiple_determinization(game_state)
+        if self.determinization_strategy == ISMCTSStrategy.PER_TRICK:
+            return self._get_action_per_trick(game_state)
         else:
-            return self._get_action_single_determinization(game_state)
+            return self._get_action_simple(game_state)
 
-    def _get_action_multiple_determinization(self, game_state: Tarot) -> int:
+    def _get_action_simple(self, game_state: Tarot) -> int:
         """Get best action using multiple determinizations"""
         action_votes = defaultdict(int)
         action_scores = defaultdict(float)
@@ -158,7 +161,7 @@ class TarotISMCTSAgent:
             determinized_state = self._determinize_game_state(game_state)
 
             # Run MCTS on this determinized state
-            best_action, action_quality = self._run_single_determinization_mcts(
+            best_action, action_quality = self._search(
                 determinized_state, iterations_per_det)
 
             if best_action is not None:
@@ -175,26 +178,7 @@ class TarotISMCTSAgent:
         legal_actions = game_state.legal_actions()
         return random.choice(legal_actions)
 
-    def _get_action_single_determinization(self, game_state: Tarot) -> int:
-        """Original single determinization approach"""
-        info_set = self._get_information_set(game_state)
-
-        for _ in range(self.iterations):
-            self._simulate(game_state, info_set)
-
-        # Choose action with highest visit count
-        if info_set in self.tree:
-            node = self.tree[info_set]
-            if node.children:
-                best_action = max(node.children.keys(),
-                                  key=lambda a: node.children[a].visits)
-                return best_action
-
-        # Fallback to random action
-        legal_actions = game_state.legal_actions()
-        return random.choice(legal_actions)
-
-    def _get_action_per_trick_determinization(self, game_state: Tarot) -> int:
+    def _get_action_per_trick(self, game_state: Tarot) -> int:
         """Get best action using per-trick determinization strategy"""
         # Check if we need to create new determinizations for this trick
         if self._should_redeterminize(game_state):
@@ -213,7 +197,7 @@ class TarotISMCTSAgent:
                 determinized_state, game_state)
 
             # Run MCTS on this determinized state
-            best_action, action_quality = self._run_single_determinization_mcts(
+            best_action, action_quality = self._search(
                 updated_state, iterations_per_det)
 
             if best_action is not None:
@@ -240,12 +224,8 @@ class TarotISMCTSAgent:
         if not self.current_trick_determinizations:
             return True
 
-        # Check if trick is empty (all cards are -1)
-        if all(card == -1 for card in game_state.trick):
-            return True
-
         # Check if this is the same trick state as when we last determinized
-        current_trick_key = (len(game_state.tricks), len(game_state.trick))
+        current_trick_key = self._get_key(game_state)
         if self.last_trick_state != current_trick_key:
             return True
 
@@ -260,7 +240,7 @@ class TarotISMCTSAgent:
             self.current_trick_determinizations.append(det_state)
 
         # Remember this trick state
-        self.last_trick_state = (len(game_state.tricks), len(game_state.trick))
+        self.last_trick_state = self._get_key(game_state)
 
     def _update_determinized_state(self, determinized_state: Tarot, current_state: Tarot) -> Tarot:
         """Update a determinized state to match the current trick progress"""
@@ -318,14 +298,13 @@ class TarotISMCTSAgent:
             hand=game_state.hands[self.player_id].copy(),
             played_cards=game_state.played_cards.copy(),
             current_trick=game_state.trick.copy(),
-            tricks_won=[len([t for p, t in game_state.tricks if p == i])
-                        for i in range(Const.NUM_PLAYERS)],
+            played_tricks=game_state.played_tricks.copy(),
             phase=game_state.phase,
             taker=game_state.taker,
             current_player=game_state.current
         )
 
-    def _simulate(self, game_state: Tarot, root_info_set: TarotInformationSet):
+    def _simulate(self, game_state: Tarot):
         """Run one MCTS simulation"""
         path = []
         current_state = game_state.clone()
@@ -540,7 +519,7 @@ class TarotISMCTSAgent:
 
         return determinized_state
 
-    def _run_single_determinization_mcts(self, determinized_state: Tarot, iterations: int) -> Tuple[Optional[int], float]:
+    def _search(self, determinized_state: Tarot, iterations: int) -> Tuple[Optional[int], float]:
         """Run MCTS on a single determinized state"""
         # Use a separate tree for this determinization to avoid contamination
         temp_tree: Dict[TarotInformationSet, TarotISMCTSNode] = {}
@@ -560,7 +539,7 @@ class TarotISMCTSAgent:
 
             # Run MCTS iterations
             for _ in range(iterations):
-                self._simulate(determinized_state, info_set)
+                self._simulate(determinized_state)
 
             # Update per-decision counters with nodes created in this determinization
             nodes_created_here = self.total_nodes_created - nodes_before
@@ -605,37 +584,19 @@ class TarotISMCTSAgent:
 
     def get_tree_stats(self) -> Dict[str, int]:
         """Get current tree statistics"""
-        if self.use_multiple_determinization:
-            # For multiple determinization strategies, we don't maintain a persistent tree
-            # Return accumulated statistics from all determinizations
-            return {
-                'total_nodes': 0,  # No persistent tree
-                'nodes_created_this_decision': self.nodes_created_this_decision,
-                'total_nodes_created': self.total_nodes_created,
-                'total_visits': 0,  # No persistent tree visits
-                'total_simulations': self.total_simulations_run,
-                'simulations_this_decision': self.simulations_this_decision,
-                'max_depth': 0,  # No persistent tree depth
-                'total_trees_created': self.total_trees_created,
-                'trees_created_this_decision': self.trees_created_this_decision
-            }
-        else:
-            # For single determinization, use the actual tree statistics
-            total_visits = sum(
-                node.visits for node in self.tree.values()) if self.tree else 0
-            max_depth = self._calculate_max_depth() if self.tree else 0
-
-            return {
-                'total_nodes': len(self.tree),
-                'nodes_created_this_decision': self.nodes_created_this_decision,
-                'total_nodes_created': self.total_nodes_created,
-                'total_visits': total_visits,
-                'total_simulations': self.total_simulations_run,
-                'simulations_this_decision': self.simulations_this_decision,
-                'max_depth': max_depth,
-                'total_trees_created': 1 if self.tree else 0,  # Single persistent tree
-                'trees_created_this_decision': 0  # No trees created per decision in single mode
-            }
+        # For multiple determinization strategies, we don't maintain a persistent tree
+        # Return accumulated statistics from all determinizations
+        return {
+            'total_nodes': 0,  # No persistent tree
+            'nodes_created_this_decision': self.nodes_created_this_decision,
+            'total_nodes_created': self.total_nodes_created,
+            'total_visits': 0,  # No persistent tree visits
+            'total_simulations': self.total_simulations_run,
+            'simulations_this_decision': self.simulations_this_decision,
+            'max_depth': 0,  # No persistent tree depth
+            'total_trees_created': self.total_trees_created,
+            'trees_created_this_decision': self.trees_created_this_decision
+        }
 
     def _calculate_max_depth(self) -> int:
         """Calculate maximum depth of the tree"""

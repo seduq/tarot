@@ -143,6 +143,7 @@
     "scipy",
     "seaborn",
     "setuptools",
-    "testpaths"
+    "testpaths",
+    "winrate"
   ],
 }

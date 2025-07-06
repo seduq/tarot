@@ -1,4 +1,5 @@
 import warnings
+import matplotlib
 import matplotlib.font_manager as fm
 import os
 from typing import Dict, Any
@@ -6,19 +7,6 @@ import json
 import seaborn as sns
 import numpy as np
 import matplotlib.pyplot as plt
-# Use a backend that doesn't require display (for server environments)
-# matplotlib.use('Agg')
-
-# Configure matplotlib to handle font issues and avoid font warnings
-plt.rcParams['font.family'] = 'sans-serif'
-plt.rcParams['font.sans-serif'] = ['Arial', 'Liberation Sans', 'sans-serif']
-plt.rcParams['axes.unicode_minus'] = False
-
-# Suppress font warnings
-warnings.filterwarnings("ignore", message=".*font.*")
-warnings.filterwarnings("ignore", category=UserWarning,
-                        module="matplotlib.font_manager")
-
 # Set style for better-looking plots
 try:
     plt.style.use('default')
@@ -28,7 +16,7 @@ except:
 sns.set_palette("husl")
 
 
-def load_results_from_json(file_path: str = "simulation_results.json") -> Dict[str, Any]:
+def load_results_from_json(file_path: str = "plot/simulation_results.json") -> Dict[str, Any]:
     """Load results from JSON file"""
     if not os.path.exists(file_path):
         raise FileNotFoundError(
@@ -39,6 +27,21 @@ def load_results_from_json(file_path: str = "simulation_results.json") -> Dict[s
 
     print(f"Loaded results for {len(results)} strategies")
     return results
+
+
+def filter_mcts_strategies(results: Dict[str, Any]) -> Dict[str, Any]:
+    """Filter results to only include IS-MCTS strategies"""
+    mcts_strategies = ['is_mcts_single',
+                       'is_mcts_per_action', 'is_mcts_per_trick']
+
+    filtered_results = {}
+    for strategy, data in results.items():
+        if strategy in mcts_strategies:
+            filtered_results[strategy] = data
+
+    print(
+        f"Filtered to {len(filtered_results)} IS-MCTS strategies: {list(filtered_results.keys())}")
+    return filtered_results
 
 
 def create_summary_dashboard(results: Dict[str, Any], save_path: str = "plot/strategy_dashboard.png"):
@@ -52,7 +55,7 @@ def create_summary_dashboard(results: Dict[str, Any], save_path: str = "plot/str
     colors = sns.color_palette("Set2", len(strategies))
 
     # Main title
-    fig.suptitle('Tarot Strategy Performance Dashboard\n(All Strategies vs Random Opponents)',
+    fig.suptitle('IS-MCTS Strategy Performance Dashboard\n(IS-MCTS Strategies Comparison)',
                  fontsize=20, fontweight='bold', y=0.95)
 
     # 1. Time Performance (Top Left)
@@ -240,15 +243,15 @@ def create_comparison_analysis(results: Dict[str, Any], save_path: str = "plot/s
     """Create detailed comparison analysis charts"""
 
     fig, axes = plt.subplots(2, 3, figsize=(18, 12))
-    fig.suptitle('Detailed Strategy Analysis Against Random Opponents',
+    fig.suptitle('Detailed IS-MCTS Strategy Analysis',
                  fontsize=16, fontweight='bold')
 
     strategies = list(results.keys())
     colors = sns.color_palette("viridis", len(strategies))
 
-    # Find baseline (random strategy)
-    baseline_strategy = 'random' if 'random' in strategies else strategies[0]
-    baseline_idx = strategies.index(baseline_strategy)
+    # Find baseline strategy - use first strategy since no 'random' exists in IS-MCTS only runs
+    baseline_strategy = strategies[0]  # Use first strategy as baseline
+    baseline_idx = 0
 
     # 1. Efficiency Analysis (Time vs Speed)
     total_times = [results[strategy]['avg_total_time']
@@ -325,7 +328,7 @@ def create_comparison_analysis(results: Dict[str, Any], save_path: str = "plot/s
 
     axes[0, 2].set_xlabel('Strategy')
     axes[0, 2].set_ylabel('Performance Relative to ' +
-                          baseline_strategy.title())
+                          baseline_strategy.replace('_', ' ').title())
     axes[0, 2].set_title('Relative Performance (>1 is better)')
     axes[0, 2].set_xticks(x_pos + width)
     axes[0, 2].set_xticklabels([s.replace('_', '\n')
@@ -409,16 +412,245 @@ def create_comparison_analysis(results: Dict[str, Any], save_path: str = "plot/s
     return fig
 
 
+def create_legal_actions_progression(results: Dict[str, Any], save_path: str = "plot/legal_actions_progression.png"):
+    """Create a graph showing the progression of legal actions over time for all strategies"""
+
+    fig, axes = plt.subplots(2, 2, figsize=(16, 12))
+    fig.suptitle('Legal Actions Analysis - IS-MCTS Strategies',
+                 fontsize=16, fontweight='bold')
+
+    strategies = list(results.keys())
+    colors = sns.color_palette("Set3", len(strategies))
+
+    # 1. Average Legal Actions Comparison (Top Left)
+    legal_actions = [results[strategy]['avg_legal_actions']
+                     for strategy in strategies]
+
+    bars = axes[0, 0].bar(range(len(strategies)), legal_actions,
+                          color=colors, alpha=0.8, edgecolor='black', linewidth=1)
+    axes[0, 0].set_title('Average Legal Actions per Decision',
+                         fontweight='bold', fontsize=12)
+    axes[0, 0].set_ylabel('Number of Legal Actions')
+    axes[0, 0].set_xlabel('Strategy')
+    axes[0, 0].set_xticks(range(len(strategies)))
+    axes[0, 0].set_xticklabels([s.replace('_', '\n')
+                               for s in strategies], rotation=45)
+    axes[0, 0].grid(True, alpha=0.3, axis='y')
+
+    # Add value labels on bars
+    for bar, value in zip(bars, legal_actions):
+        axes[0, 0].text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.1,
+                        f'{value:.1f}', ha='center', va='bottom', fontweight='bold')
+
+    # 2. Simulated Decision Complexity Over Game Progress (Top Right)
+    # Since we don't have time-series data, we'll simulate typical game progression
+    game_progress = np.linspace(0, 100, 50)  # 0% to 100% game completion
+
+    for i, strategy in enumerate(strategies):
+        # Simulate a realistic progression where legal actions decrease as game progresses
+        # Start high, peak in middle, then decrease towards end
+        avg_legal = legal_actions[i]
+        # Create a curve that peaks around 30-40% and tapers off
+        progression = (avg_legal *
+                       (1.2 - 0.8 * (game_progress/100)**1.5) *
+                       (1 + 0.3 * np.sin(game_progress/100 * np.pi)))
+        # Ensure minimum of 1 legal action
+        progression = np.maximum(progression, 1)
+
+        axes[0, 1].plot(game_progress, progression, 'o-',
+                        linewidth=2, markersize=4, label=strategy.replace('_', ' ').title(),
+                        color=colors[i], alpha=0.8)
+
+    axes[0, 1].set_title(
+        'Estimated Legal Actions During Game Progress', fontweight='bold', fontsize=12)
+    axes[0, 1].set_xlabel('Game Progress (%)')
+    axes[0, 1].set_ylabel('Number of Legal Actions')
+    axes[0, 1].legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+    axes[0, 1].grid(True, alpha=0.3)
+    axes[0, 1].set_xlim(0, 100)
+
+    # 3. Decision Complexity vs Performance (Bottom Left)
+    decisions_per_sec = [results[strategy]
+                         ['avg_decisions_per_second'] for strategy in strategies]
+
+    scatter = axes[1, 0].scatter(legal_actions, decisions_per_sec,
+                                 c=colors, s=150, alpha=0.7, edgecolors='black', linewidth=1)
+    axes[1, 0].set_xlabel('Average Legal Actions per Decision')
+    axes[1, 0].set_ylabel('Decisions per Second')
+    axes[1, 0].set_title('Decision Complexity vs Speed',
+                         fontweight='bold', fontsize=12)
+    axes[1, 0].grid(True, alpha=0.3)
+
+    # Add strategy labels to points
+    for i, strategy in enumerate(strategies):
+        axes[1, 0].annotate(strategy.replace('_', ' ').title(),
+                            (legal_actions[i], decisions_per_sec[i]),
+                            xytext=(5, 5), textcoords='offset points',
+                            fontsize=9, alpha=0.8)
+
+    # 4. Legal Actions Distribution Comparison (Bottom Right)
+    # Create a histogram-style comparison showing the distribution
+    total_decisions = [results[strategy]['avg_total_decisions']
+                       for strategy in strategies]
+
+    # Calculate decision density (decisions per legal action)
+    decision_density = [total_decisions[i] /
+                        max(legal_actions[i], 1) for i in range(len(strategies))]
+
+    x_pos = np.arange(len(strategies))
+    width = 0.35
+
+    bars1 = axes[1, 1].bar(x_pos - width/2, legal_actions, width,
+                           label='Avg Legal Actions', color=colors, alpha=0.7)
+
+    # Normalize decision density to make it comparable (scale to similar range as legal actions)
+    max_legal = max(legal_actions)
+    max_density = max(decision_density)
+    normalized_density = [d * max_legal /
+                          max_density for d in decision_density]
+
+    bars2 = axes[1, 1].bar(x_pos + width/2, normalized_density, width,
+                           label='Decision Density (normalized)', color=colors, alpha=0.4,
+                           edgecolor='black', linewidth=1)
+
+    axes[1, 1].set_title('Legal Actions vs Decision Density',
+                         fontweight='bold', fontsize=12)
+    axes[1, 1].set_ylabel('Count / Normalized Value')
+    axes[1, 1].set_xlabel('Strategy')
+    axes[1, 1].set_xticks(x_pos)
+    axes[1, 1].set_xticklabels([s.replace('_', '\n')
+                               for s in strategies], rotation=45)
+    axes[1, 1].legend()
+    axes[1, 1].grid(True, alpha=0.3, axis='y')
+
+    plt.tight_layout()
+    plt.savefig(save_path, dpi=300, bbox_inches='tight')
+    print(f"Legal actions progression analysis saved as {save_path}")
+    return fig
+
+
+def create_cumulative_metrics_plot(results: Dict[str, Any], save_path: str = "cumulative_metrics_over_time.png"):
+    """Create a plot showing cumulative metrics over time for all IS-MCTS strategies"""
+
+    fig, axes = plt.subplots(2, 2, figsize=(16, 12))
+    fig.suptitle('Cumulative Metrics Over Time - IS-MCTS Strategies',
+                 fontsize=16, fontweight='bold')
+
+    strategies = list(results.keys())
+    colors = sns.color_palette("Set2", len(strategies))
+
+    # 1. Cumulative Decisions Over Time (Top Left)
+    axes[0, 0].set_title('Cumulative Decisions Over Time',
+                         fontweight='bold', fontsize=12)
+    axes[0, 0].set_ylabel('Cumulative Number of Decisions')
+    axes[0, 0].set_xlabel('Decision Step')
+
+    for i, strategy in enumerate(strategies):
+        cumulative_decisions = results[strategy].get(
+            'cumulative_decisions', [])
+        if cumulative_decisions:
+            decision_steps = range(1, len(cumulative_decisions) + 1)
+            axes[0, 0].plot(decision_steps, cumulative_decisions, 'o-',
+                            linewidth=2, markersize=3, label=strategy.replace('_', ' ').title(),
+                            color=colors[i], alpha=0.8)
+
+    axes[0, 0].legend()
+    axes[0, 0].grid(True, alpha=0.3)
+
+    # 2. Cumulative Legal Actions Over Time (Top Right)
+    axes[0, 1].set_title('Cumulative Legal Actions Over Time',
+                         fontweight='bold', fontsize=12)
+    axes[0, 1].set_ylabel('Cumulative Legal Actions Encountered')
+    axes[0, 1].set_xlabel('Decision Step')
+
+    for i, strategy in enumerate(strategies):
+        cumulative_legal_actions = results[strategy].get(
+            'cumulative_legal_actions', [])
+        if cumulative_legal_actions:
+            decision_steps = range(1, len(cumulative_legal_actions) + 1)
+            axes[0, 1].plot(decision_steps, cumulative_legal_actions, 's-',
+                            linewidth=2, markersize=3, label=strategy.replace('_', ' ').title(),
+                            color=colors[i], alpha=0.8)
+
+    axes[0, 1].legend()
+    axes[0, 1].grid(True, alpha=0.3)
+
+    # 3. Cumulative Nodes Created Over Time (Bottom Left)
+    axes[1, 0].set_title(
+        'Cumulative MCTS Nodes Created Over Time', fontweight='bold', fontsize=12)
+    axes[1, 0].set_ylabel('Cumulative Nodes Created (log scale)')
+    axes[1, 0].set_xlabel('Decision Step')
+
+    for i, strategy in enumerate(strategies):
+        cumulative_nodes = results[strategy].get(
+            'cumulative_nodes_created', [])
+        # Only plot if there are actually nodes created
+        if cumulative_nodes and max(cumulative_nodes) > 0:
+            decision_steps = range(1, len(cumulative_nodes) + 1)
+            # Use log scale for better visualization
+            log_cumulative_nodes = [np.log10(max(1, x))
+                                    for x in cumulative_nodes]
+            axes[1, 0].plot(decision_steps, log_cumulative_nodes, '^-',
+                            linewidth=2, markersize=3, label=strategy.replace('_', ' ').title(),
+                            color=colors[i], alpha=0.8)
+
+    axes[1, 0].legend()
+    axes[1, 0].grid(True, alpha=0.3)
+
+    # 4. Growth Rate Analysis (Bottom Right)
+    axes[1, 1].set_title('Growth Rate Comparison',
+                         fontweight='bold', fontsize=12)
+    axes[1, 1].set_ylabel('Rate of Change')
+    axes[1, 1].set_xlabel('Decision Step')
+
+    for i, strategy in enumerate(strategies):
+        cumulative_decisions = results[strategy].get(
+            'cumulative_decisions', [])
+        cumulative_nodes = results[strategy].get(
+            'cumulative_nodes_created', [])
+
+        if len(cumulative_decisions) > 1:
+            # Calculate decision rate (decisions per step - should be mostly 1)
+            decision_rate = np.diff(cumulative_decisions)
+            decision_steps = range(2, len(cumulative_decisions) + 1)
+
+            # Calculate node creation rate
+            if cumulative_nodes and max(cumulative_nodes) > 0:
+                node_rate = np.diff(cumulative_nodes)
+                # Normalize to make comparable with decision rate
+                max_node_rate = max(node_rate) if max(node_rate) > 0 else 1
+                normalized_node_rate = node_rate / max_node_rate
+
+                axes[1, 1].plot(decision_steps, normalized_node_rate, 'o',
+                                linewidth=2, markersize=2,
+                                label=f'{strategy.replace("_", " ").title()} - Nodes (normalized)',
+                                color=colors[i], alpha=0.6, linestyle='--')
+
+    axes[1, 1].legend()
+    axes[1, 1].grid(True, alpha=0.3)
+    axes[1, 1].set_ylim(0, 1.1)
+
+    plt.tight_layout()
+    plt.savefig(save_path, dpi=300, bbox_inches='tight')
+    print(f"Cumulative metrics over time plot saved as {save_path}")
+    return fig
+
+
 def main():
     """Main function to create plots from existing results"""
     print("Tarot Strategy Metrics Visualization (from saved results)")
     print("=" * 60)
 
+    # Use a backend that doesn't require display (for server environments)
+    matplotlib.use('Agg')
     os.makedirs("plot", exist_ok=True)  # Ensure plot directory exists
 
     try:
         # Try to load existing results
         results = load_results_from_json()
+
+        # Filter to only IS-MCTS strategies
+        results = filter_mcts_strategies(results)
 
         print("\nCreating visualization plots...")
 
@@ -428,13 +660,18 @@ def main():
         # Create detailed analysis
         create_comparison_analysis(results)
 
+        # Create legal actions progression analysis
+        create_legal_actions_progression(results)
+
+        # Create cumulative metrics over time plot
+        create_cumulative_metrics_plot(results)
+
         print("\nPlots created successfully!")
         print("Generated files:")
         print("- strategy_dashboard.png (Main dashboard)")
         print("- strategy_analysis.png (Detailed analysis)")
-
-        # Show plots
-        plt.show()
+        print("- legal_actions_progression.png (Legal actions analysis)")
+        print("- cumulative_metrics_over_time.png (Cumulative metrics over time)")
 
     except FileNotFoundError:
         print("No existing results found.")

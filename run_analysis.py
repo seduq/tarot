@@ -10,21 +10,8 @@ import warnings
 import matplotlib
 import matplotlib.pyplot as plt
 
-# Use a backend that doesn't require display (for server environments)
-# matplotlib.use('Agg')
 
-# Configure matplotlib to handle font issues and avoid font warnings
-plt.rcParams['font.family'] = 'sans-serif'
-plt.rcParams['font.sans-serif'] = ['Arial', 'Liberation Sans', 'sans-serif']
-plt.rcParams['axes.unicode_minus'] = False
-
-# Suppress font warnings
-warnings.filterwarnings("ignore", message=".*font.*")
-warnings.filterwarnings("ignore", category=UserWarning,
-                        module="matplotlib.font_manager")
-
-
-def run_simulation_only(iterations=200, games=5, verbose=False):
+def run_simulation_only(iterations=200, games=5, determinizations=10, verbose=False):
     """Run only the simulation without plotting"""
     from simulation import compare_strategies, StrategyType
 
@@ -32,7 +19,6 @@ def run_simulation_only(iterations=200, games=5, verbose=False):
         StrategyType.RANDOM,
         StrategyType.MAX_CARD,
         StrategyType.MIN_CARD,
-        StrategyType.IS_MCTS_SINGLE,
         StrategyType.IS_MCTS_PER_ACTION,
         StrategyType.IS_MCTS_PER_TRICK
     ]
@@ -43,6 +29,7 @@ def run_simulation_only(iterations=200, games=5, verbose=False):
         strategies=strategies,
         iterations=iterations,
         games_per_strategy=games,
+        determinizations=determinizations,
         verbose=verbose
     )
 
@@ -122,6 +109,8 @@ def main():
                         help='MCTS iterations per decision (default: 200)')
     parser.add_argument('--games', type=int, default=5,
                         help='Number of games per strategy (default: 5)')
+    parser.add_argument('--determinizations', type=int, default=10,
+                        help='Number of determinizations for multiple (default: 10)')
     parser.add_argument('--verbose', action='store_true',
                         help='Enable verbose output during simulation')
     parser.add_argument('--quick', action='store_true',
@@ -150,7 +139,7 @@ def main():
     try:
         if args.mode == 'sim':
             results = run_simulation_only(
-                args.iterations, args.games, args.verbose)
+                args.iterations, args.games, args.determinizations, args.verbose)
             print("\nSimulation completed. Results saved to simulation_results.json")
 
         elif args.mode == 'plot':
