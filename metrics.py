@@ -6,7 +6,7 @@ during Tarot simulations for later analysis and plotting.
 """
 
 from dataclasses import dataclass, field
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 import time
 import json
 
@@ -24,6 +24,11 @@ class GameMetrics:
     # Game progression
     legal_moves_history: List[int] = field(default_factory=list)
     decision_times: List[float] = field(default_factory=list)  # Only for MCTS
+    # MCTS specific metrics
+    # Nodes created per MCTS decision
+    nodes_created: List[int] = field(default_factory=list)
+    # Illegal move attempts per MCTS decision
+    illegal_moves: List[int] = field(default_factory=list)
     # Game info
     num_mcts_agents: int = 0
     mcts_config: Dict[str, Any] = field(default_factory=dict)
@@ -161,8 +166,45 @@ class MetricsCollector:
 
         return averages
 
-    def save_to_file(self, filename: str):
+    def get_average_nodes_created(self, strategy: str) -> float:
+        """Get average number of nodes created per MCTS decision for a strategy."""
+        strategy_games = self.get_strategy_metrics(strategy)
+        mcts_games = [game for game in strategy_games if game.nodes_created]
+
+        if not mcts_games:
+            return 0.0
+
+        all_nodes = []
+        for game in mcts_games:
+            all_nodes.extend(game.nodes_created)
+
+        return sum(all_nodes) / len(all_nodes) if all_nodes else 0.0
+
+    def get_average_illegal_moves(self, strategy: str) -> float:
+        """Get average number of illegal move attempts per MCTS decision for a strategy."""
+        strategy_games = self.get_strategy_metrics(strategy)
+        mcts_games = [game for game in strategy_games if game.illegal_moves]
+
+        if not mcts_games:
+            return 0.0
+
+        all_illegal = []
+        for game in mcts_games:
+            all_illegal.extend(game.illegal_moves)
+
+        return sum(all_illegal) / len(all_illegal) if all_illegal else 0.0
+
+    def save_to_file(self, output_dir: str = "results", filename: Optional[str] = None):
         """Save metrics to JSON file."""
+        import os
+
+        if filename is None:
+            filename = "simulation_metrics.json"
+
+        # Ensure output directory exists
+        os.makedirs(output_dir, exist_ok=True)
+        output_file = os.path.join(output_dir, filename)
+
         data = {
             "games": [
                 {
@@ -172,6 +214,8 @@ class MetricsCollector:
                     "defender_won": game.defender_won,
                     "legal_moves_history": game.legal_moves_history,
                     "decision_times": game.decision_times,
+                    "nodes_created": game.nodes_created,
+                    "illegal_moves": game.illegal_moves,
                     "num_mcts_agents": game.num_mcts_agents,
                     "mcts_config": game.mcts_config
                 }
@@ -179,13 +223,13 @@ class MetricsCollector:
             ]
         }
 
-        with open(f"results/{filename}", 'w') as f:
+        with open(output_file, 'w') as f:
             json.dump(data, f, indent=2)
 
     @classmethod
     def load_from_file(cls, filename: str) -> 'MetricsCollector':
         """Load metrics from JSON file."""
-        with open(f"results/{filename}", 'r') as f:
+        with open(f"{filename}", 'r') as f:
             data = json.load(f)
 
         collector = cls()
@@ -197,9 +241,16 @@ class MetricsCollector:
                 defender_won=game_data["defender_won"],
                 legal_moves_history=game_data["legal_moves_history"],
                 decision_times=game_data["decision_times"],
+                nodes_created=game_data.get("nodes_created", []),
+                illegal_moves=game_data.get("illegal_moves", []),
                 num_mcts_agents=game_data["num_mcts_agents"],
                 mcts_config=game_data["mcts_config"]
             )
             collector.add_game(metrics)
 
         return collector
+
+    def get_available_strategies(self) -> List[str]:
+        """Get list of all strategies present in the collected data."""
+        strategies = set(game.strategy for game in self.games)
+        return sorted(list(strategies))

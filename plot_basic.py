@@ -1,17 +1,22 @@
 """
 Basic Plotting Module for Tarot Game Metrics
 
-This module provides simple plotting functions for visualizing game metrics.
+This module provides simple def plot_legal_moves_growth(collector: MetricsCodef plot_decision_times(collector: MetricsCollector, save_path: Optional[str] = None, show_plots: bool = False, 
+                        expected_games: Optional[int] = None):ector, strategies: List[str], save_path: Optional[str] = None, 
+                            show_plots: bool = False, expected_games: Optional[int] = None):otting functions for visualizing game metrics.
 Each metric gets its own figure for clear comparison across strategies.
 """
 
+import argparse
 import matplotlib.pyplot as plt
 import numpy as np
+import os
 from typing import Dict, List, Optional
 from metrics import MetricsCollector
 
 
-def plot_win_rates(collector: MetricsCollector, strategies: List[str], save_path: Optional[str] = None):
+def plot_win_rates(collector: MetricsCollector, strategies: List[str], save_path: Optional[str] = None,
+                   show_plots: bool = False, expected_games: Optional[int] = None):
     """
     Create bar plots for taker and defender win rates.
 
@@ -19,17 +24,24 @@ def plot_win_rates(collector: MetricsCollector, strategies: List[str], save_path
         collector: MetricsCollector with game data
         strategies: List of strategy names to compare
         save_path: Optional path to save the plot
+        show_plots: Whether to display the plot
+        expected_games: Expected number of games per strategy
     """
     # Create subplots for taker and defender win rates
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
 
     taker_rates = []
     defender_rates = []
+    game_counts = []
 
     for strategy in strategies:
         win_rates = collector.get_win_rates(strategy)
         taker_rates.append(win_rates["taker_win_rate"])
         defender_rates.append(win_rates["defender_win_rate"])
+
+        # Get actual game count for this strategy
+        strategy_games = collector.get_strategy_metrics(strategy)
+        game_counts.append(len(strategy_games))
 
     # Taker win rates
     bars1 = ax1.bar(strategies, taker_rates, color=[
@@ -38,11 +50,11 @@ def plot_win_rates(collector: MetricsCollector, strategies: List[str], save_path
     ax1.set_ylabel('Win Rate')
     ax1.set_ylim(0, 1)
 
-    # Add value labels on bars
-    for bar, rate in zip(bars1, taker_rates):
+    # Add value labels on bars with game counts
+    for bar, rate, count in zip(bars1, taker_rates, game_counts):
         height = bar.get_height()
         ax1.text(bar.get_x() + bar.get_width()/2., height + 0.01,
-                 f'{rate:.3f}', ha='center', va='bottom')
+                 f'{rate:.3f}\n({count} games)', ha='center', va='bottom', fontsize=9)
 
     # Defender win rates
     bars2 = ax2.bar(strategies, defender_rates, color=[
@@ -51,21 +63,25 @@ def plot_win_rates(collector: MetricsCollector, strategies: List[str], save_path
     ax2.set_ylabel('Win Rate')
     ax2.set_ylim(0, 1)
 
-    # Add value labels on bars
-    for bar, rate in zip(bars2, defender_rates):
+    # Add value labels on bars with game counts
+    for bar, rate, count in zip(bars2, defender_rates, game_counts):
         height = bar.get_height()
         ax2.text(bar.get_x() + bar.get_width()/2., height + 0.01,
-                 f'{rate:.3f}', ha='center', va='bottom')
+                 f'{rate:.3f}\n({count} games)', ha='center', va='bottom', fontsize=9)
 
     plt.tight_layout()
 
     if save_path:
         plt.savefig(save_path, dpi=300, bbox_inches='tight')
 
-    plt.show()
+    if show_plots:
+        plt.show()
+    else:
+        plt.close()
 
 
-def plot_legal_moves_growth(collector: MetricsCollector, strategies: List[str], save_path: Optional[str] = None):
+def plot_legal_moves_growth(collector: MetricsCollector, strategies: List[str], save_path: Optional[str] = None,
+                            show_plots: bool = True, expected_games: Optional[int] = None):
     """
     Create line plot for legal moves growth over game turns with smoothing.
 
@@ -73,10 +89,16 @@ def plot_legal_moves_growth(collector: MetricsCollector, strategies: List[str], 
         collector: MetricsCollector with game data
         strategies: List of strategy names to compare
         save_path: Optional path to save the plot
+        show_plots: Whether to display the plot
+        expected_games: Expected number of games per strategy
     """
     plt.figure(figsize=(10, 6))
 
     colors = ['#ff7f0e', '#2ca02c', '#d62728', '#1f77b4']
+
+    # Count total games across all strategies for title
+    total_games = sum(len(collector.get_strategy_metrics(strategy))
+                      for strategy in strategies)
 
     for i, strategy in enumerate(strategies):
         # Use smoothing to reduce peaks and noise
@@ -89,7 +111,8 @@ def plot_legal_moves_growth(collector: MetricsCollector, strategies: List[str], 
                      color=colors[i % len(colors)],
                      linewidth=2, marker='o', markersize=3, alpha=0.8)
 
-    plt.title('Legal Moves Growth During Game (Smoothed)')
+    plt.title(
+        f'Legal Moves Growth During Game (Smoothed) - {total_games} total games')
     plt.xlabel('Game Turn')
     plt.ylabel('Average Number of Legal Moves (5-turn smoothing)')
     plt.legend()
@@ -98,18 +121,28 @@ def plot_legal_moves_growth(collector: MetricsCollector, strategies: List[str], 
     if save_path:
         plt.savefig(save_path, dpi=300, bbox_inches='tight')
 
-    plt.show()
+    if show_plots:
+        plt.show()
+    else:
+        plt.close()
 
 
-def plot_decision_times(collector: MetricsCollector, save_path: Optional[str] = None):
+def plot_decision_times(collector: MetricsCollector, save_path: Optional[str] = None, show_plots: bool = True,
+                        expected_games: Optional[int] = None):
     """
     Create line plot for RIS-MCTS average decision times through game progress.
 
     Args:
         collector: MetricsCollector with game data
         save_path: Optional path to save the plot
+        show_plots: Whether to display the plot
+        expected_games: Expected number of games per strategy
     """
     plt.figure(figsize=(10, 6))
+
+    # Get RIS-MCTS game count for title
+    ris_mcts_games = collector.get_strategy_metrics("ris_mcts")
+    game_count = len(ris_mcts_games)
 
     # Only plot RIS-MCTS strategy with progressive averaging
     decision_times_avg = collector.get_average_decision_times(
@@ -122,7 +155,8 @@ def plot_decision_times(collector: MetricsCollector, save_path: Optional[str] = 
                  color='#1f77b4',
                  linewidth=2, marker='o', markersize=4)
 
-        plt.title('RIS-MCTS Average Decision Time Through MCTS Decisions')
+        plt.title(
+            f'RIS-MCTS Average Decision Time Through MCTS Decisions ({game_count} games)')
         plt.xlabel('MCTS Decision Number')
         plt.ylabel('Cumulative Average Decision Time (seconds)')
         plt.legend()
@@ -130,120 +164,186 @@ def plot_decision_times(collector: MetricsCollector, save_path: Optional[str] = 
     else:
         plt.text(0.5, 0.5, 'No RIS-MCTS decision time data available',
                  ha='center', va='center', transform=plt.gca().transAxes)
-        plt.title('RIS-MCTS Decision Time Growth - No Data')
+        plt.title(
+            f'RIS-MCTS Decision Time Growth - No Data ({game_count} games found)')
 
     if save_path:
         plt.savefig(save_path, dpi=300, bbox_inches='tight')
 
-    plt.show()
+    if show_plots:
+        plt.show()
+    else:
+        plt.close()
 
 
-def plot_mcts_comparison(collector: MetricsCollector, mcts_configs: List[Dict], save_path: Optional[str] = None):
-    """
-    Compare different RIS-MCTS configurations.
-
-    Args:
-        collector: MetricsCollector with game data
-        mcts_configs: List of MCTS configuration dicts to compare
-        save_path: Optional path to save the plot
-    """
-    fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(15, 10))
-
-    colors = plt.cm.get_cmap('tab10')(np.linspace(0, 1, len(mcts_configs)))
-
-    for i, config in enumerate(mcts_configs):
-        # Filter games by MCTS config
-        config_games = [
-            game for game in collector.get_strategy_metrics("ris_mcts")
-            if game.mcts_config == config
-        ]
-
-        if not config_games:
-            continue
-
-        config_name = f"iter={config['iterations']}, exp={config['exploration_constant']}"
-
-        # Win rates
-        total_games = len(config_games)
-        taker_wins = sum(1 for game in config_games if game.taker_won)
-        defender_wins = sum(1 for game in config_games if game.defender_won)
-
-        ax1.bar(i, taker_wins / total_games,
-                color=colors[i], label=config_name)
-        ax2.bar(i, defender_wins / total_games, color=colors[i])
-
-        # Decision times (if available)
-        decision_times = []
-        for game in config_games:
-            if game.decision_times:
-                decision_times.extend(game.decision_times)
-
-        if decision_times:
-            ax3.boxplot([decision_times], positions=[i], widths=0.6)
-
-        # Legal moves (average per game)
-        legal_moves_per_game = [
-            sum(game.legal_moves_history) / len(game.legal_moves_history)
-            for game in config_games
-            if game.legal_moves_history
-        ]
-
-        if legal_moves_per_game:
-            ax4.boxplot([legal_moves_per_game], positions=[i], widths=0.6)
-
-    ax1.set_title('Taker Win Rate by MCTS Config')
-    ax1.set_ylabel('Win Rate')
-    ax1.legend()
-
-    ax2.set_title('Defender Win Rate by MCTS Config')
-    ax2.set_ylabel('Win Rate')
-
-    ax3.set_title('Decision Times by MCTS Config')
-    ax3.set_ylabel('Decision Time (seconds)')
-
-    ax4.set_title('Average Legal Moves by MCTS Config')
-    ax4.set_ylabel('Average Legal Moves per Turn')
-
-    plt.tight_layout()
-
-    if save_path:
-        plt.savefig(save_path, dpi=300, bbox_inches='tight')
-
-    plt.show()
-
-
-def create_all_plots(metrics_file: str, output_dir: str = "plots"):
+def create_all_plots(metrics_file: str, output_dir: str = "plots", strategies: Optional[List[str]] = None,
+                     plot_types: Optional[List[str]] = None, show_plots: bool = False,
+                     expected_games: Optional[int] = None):
     """
     Create all basic plots from a metrics file.
 
     Args:
         metrics_file: Path to the metrics JSON file
         output_dir: Directory to save plots
+        strategies: List of strategies to include (default: all available)
+        plot_types: List of plot types to generate (default: all)
+        show_plots: Whether to display plots interactively
+        expected_games: Expected number of games per strategy (for validation/display)
     """
-    import os
     os.makedirs(output_dir, exist_ok=True)
 
     collector = MetricsCollector.load_from_file(metrics_file)
-    strategies = ["random", "max_card", "min_card", "ris_mcts"]
+
+    # Use provided strategies or default ones
+    if strategies is None:
+        strategies = ["random", "max_card", "min_card", "ris_mcts"]
+
+    # Filter strategies to only include those that have data
+    available_strategies = collector.get_available_strategies()
+    strategies = [s for s in strategies if s in available_strategies]
+
+    if not strategies:
+        print("Warning: No valid strategies found in the data")
+        return
+
+    # Default plot types
+    all_plot_types = ["win_rates", "legal_moves", "decision_times"]
+    if plot_types is None:
+        plot_types = all_plot_types
+
+    print(f"Creating plots for strategies: {strategies}")
+    print(f"Plot types: {plot_types}")
+
+    # Report game counts and validate if expected_games is provided
+    if expected_games:
+        print(f"Expected games per strategy: {expected_games}")
+
+    for strategy in strategies:
+        strategy_games = collector.get_strategy_metrics(strategy)
+        game_count = len(strategy_games)
+        print(f"  {strategy}: {game_count} games", end="")
+
+        if expected_games and game_count != expected_games:
+            print(f" (WARNING: Expected {expected_games})")
+        else:
+            print()
+
+    # Temporarily disable interactive plotting if show_plots is False
+    if not show_plots:
+        plt.ioff()
 
     # Win rates plot
-    plot_win_rates(collector, strategies, f"{output_dir}/win_rates.png")
+    if "win_rates" in plot_types:
+        print("Creating win rates plot...")
+        plot_win_rates(collector, strategies,
+                       f"{output_dir}/win_rates.png", show_plots, expected_games)
 
     # Legal moves growth plot
-    plot_legal_moves_growth(collector, strategies,
-                            f"{output_dir}/legal_moves_growth.png")
+    if "legal_moves" in plot_types:
+        print("Creating legal moves growth plot...")
+        plot_legal_moves_growth(
+            collector, strategies, f"{output_dir}/legal_moves_growth.png", show_plots, expected_games)
 
     # Decision times plot (RIS-MCTS only)
-    plot_decision_times(collector, f"{output_dir}/decision_times.png")
+    if "decision_times" in plot_types and "ris_mcts" in strategies:
+        print("Creating decision times plot...")
+        plot_decision_times(
+            collector, f"{output_dir}/decision_times.png", show_plots, expected_games)
 
-    plot_mcts_comparison(
-        collector,
-        [
-            {"iterations": 50, "exploration_constant": 1.4},
-            {"iterations": 100, "exploration_constant": 1.4},
-            {"iterations": 200, "exploration_constant": 1.4}
-        ],
-        f"{output_dir}/mcts_comparison.png"
-    )
+    # Re-enable interactive plotting
+    if not show_plots:
+        plt.ion()
 
     print(f"All plots saved to {output_dir}/")
+
+
+def parse_arguments():
+    """Parse command line arguments for basic plotting."""
+    parser = argparse.ArgumentParser(
+        description='Generate basic plots from Tarot game metrics',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Generate all plots from default metrics file (save only)
+  python plot_basic.py
+
+  # Use custom metrics file and output directory with interactive display
+  python plot_basic.py --input results/my_metrics.json --output my_plots --show
+
+  # Generate only specific plot types with game count validation
+  python plot_basic.py --plot-types win_rates legal_moves --games 200
+
+  # Include only specific strategies with interactive display
+  python plot_basic.py --strategies random --games 100 --show
+
+  # Batch processing (default behavior - save only)
+  python plot_basic.py --output batch_plots --games 300
+        """)
+
+    parser.add_argument('--input', '-i', type=str, default='results/simulation_metrics.json',
+                        help='Path to input metrics JSON file (default: results/simulation_metrics.json)')
+
+    parser.add_argument('--output', '-o', type=str, default='plots',
+                        help='Output directory for plots (default: plots)')
+
+    parser.add_argument('--games', type=int,
+                        help='Expected number of games per strategy (for display purposes)')
+
+    parser.add_argument('--strategies', nargs='+',
+                        choices=['random', 'max_card', 'min_card', 'ris_mcts'],
+                        help='Strategies to include in plots (default: all available)')
+
+    parser.add_argument('--plot-types', nargs='+',
+                        choices=['win_rates', 'legal_moves', 'decision_times'],
+                        help='Types of plots to generate (default: all)')
+
+    parser.add_argument('--show', action='store_true',
+                        help='Display plots interactively (default: save only)')
+
+    parser.add_argument('--verbose', '-v', action='store_true',
+                        help='Enable verbose output')
+
+    return parser.parse_args()
+
+
+def main():
+    """Main function to generate plots with command line arguments."""
+    args = parse_arguments()
+
+    if args.verbose:
+        print(f"Input file: {args.input}")
+        print(f"Output directory: {args.output}")
+        print(f"Show plots: {args.show}")
+        if args.games:
+            print(f"Expected games: {args.games}")
+        if args.strategies:
+            print(f"Strategies: {args.strategies}")
+        if args.plot_types:
+            print(f"Plot types: {args.plot_types}")
+
+    try:
+        # Check if input file exists
+        if not os.path.exists(args.input):
+            print(f"Error: Input file '{args.input}' not found")
+            return
+
+        create_all_plots(
+            metrics_file=args.input,
+            output_dir=args.output,
+            strategies=args.strategies,
+            plot_types=args.plot_types,
+            show_plots=args.show,
+            expected_games=args.games
+        )
+
+        print("Plotting completed successfully!")
+
+    except Exception as e:
+        print(f"Error during plotting: {e}")
+        if args.verbose:
+            import traceback
+            traceback.print_exc()
+
+
+if __name__ == "__main__":
+    main()

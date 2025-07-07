@@ -271,10 +271,18 @@ def play_with_strategy(strategy_type: StrategyType, config: ISMCTSConfig, max_mc
                 action = current_agent.get_action(state)
                 decision_time = time.time() - start_time
                 metrics.decision_times.append(decision_time)
+
+                # Collect MCTS-specific metrics
+                nodes_created, illegal_moves = current_agent.mcts_agent.get_last_decision_stats()
+                metrics.nodes_created.append(nodes_created)
+                metrics.illegal_moves.append(illegal_moves)
             else:
                 action = current_agent.get_action(state)
                 # Add minimal time for non-MCTS agents to keep arrays same length
                 metrics.decision_times.append(0.0)
+                # Add zero values for MCTS-specific metrics for non-MCTS agents
+                metrics.nodes_created.append(0)
+                metrics.illegal_moves.append(0)
 
         # Apply the selected action and advance to the next state
         state.apply_action(action)
@@ -438,10 +446,29 @@ def main():
         print(f"  Completed {args.games} games" + " " * 20)  # Clear the line
 
     # Save metrics to file
-    metrics_file = f"simulation_metrics_seed_{args.seed}.json"
-    collector.save_to_file(metrics_file)
+    metrics_file = f"simulation_metrics.json"
+    collector.save_to_file("results", metrics_file)
     print(f"\nMetrics saved to: results/{metrics_file}")
-    print("Use plot_basic.py to generate plots from this data.")
+
+    # Generate readable reports
+    try:
+        from report_generator import MetricsReporter
+        reporter = MetricsReporter(collector)
+
+        # Generate text and CSV reports in results directory
+        text_report = f"simulation_report_seed_{args.seed}.txt"
+        csv_report = f"simulation_summary_seed_{args.seed}.csv"
+
+        reporter.generate_summary_report("results", text_report)
+        reporter.generate_csv_summary("results", csv_report)
+
+        print(f"Reports generated:")
+        print(f"  Detailed report: results/{text_report}")
+        print(f"  CSV summary: results/{csv_report}")
+    except ImportError:
+        print("Report generator not available. Install required dependencies.")
+
+    print("\nUse plot_basic.py to generate plots from this data.")
 
 
 if __name__ == "__main__":

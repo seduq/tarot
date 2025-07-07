@@ -185,6 +185,7 @@ class TarotISMCTSAgent:
         self.total_simulations_run = 0
         self.nodes_created_this_decision = 0
         self.simulations_this_decision = 0
+        self.misses_this_decision = 0
 
         # The search tree: maps information sets to their corresponding nodes
         self.tree: Dict[TarotInformationSet, TarotISMCTSNode] = {}
@@ -205,11 +206,18 @@ class TarotISMCTSAgent:
         Returns:
             Index of the selected action
         """
+        # Reset per-decision statistics
+        self.nodes_created_this_decision = 0
+        self.simulations_this_decision = 0
+        self.misses_this_decision = 0
+        nodes_before = len(self.tree)
+
         # Get or create the root node for the current information set
         root_info = self.info_key(game)
         if root_info not in self.tree:
             self.tree[root_info] = TarotISMCTSNode(
                 root_info, exploration_constant=self.exploration_constant)
+            self.nodes_created_this_decision += 1
         root_node = self.tree[root_info]
 
         # Run MCTS simulations
@@ -218,6 +226,15 @@ class TarotISMCTSAgent:
             determinized_game = self.determinization(game)
             # Run one simulation from this determinized state
             self.simulate(determinized_game)
+            self.simulations_this_decision += 1
+
+        # Update total statistics
+        self.total_nodes_created += self.nodes_created_this_decision
+        self.total_simulations_run += self.simulations_this_decision
+
+        # Calculate nodes created this decision (including new nodes from simulations)
+        nodes_after = len(self.tree)
+        self.nodes_created_this_decision = nodes_after - nodes_before
 
         # Select the action with the most visits (most promising)
         if not root_node.expanded_actions:
@@ -265,6 +282,7 @@ class TarotISMCTSAgent:
 
             # Default to random action selection
             action = random.choice(legal)
+            used_fallback = False
 
             # Get or create the node for this information set
             if info not in self.tree:
@@ -283,6 +301,10 @@ class TarotISMCTSAgent:
             elif node.expanded_actions:
                 # Use UCB1 to select among previously tried actions
                 action = node.select_action(legal)
+            else:
+                # Had to fall back to random selection (count as a "miss")
+                used_fallback = True
+                self.misses_this_decision += 1
 
             # Apply the selected action and move to the next state
             game.apply_action(action)
@@ -406,20 +428,11 @@ class TarotISMCTSAgent:
         information_set += [game.taker]
         return TarotInformationSet(information_set)
 
-    def retrieve_node_statistics(self) -> Tuple[int, int]:
+    def get_last_decision_stats(self) -> Tuple[int, int]:
         """
-        Collect statistics about the search tree for analysis.
-
-        This method counts statistics from all nodes in the flat tree structure:
-        1. Total number of nodes created
-        2. Total number of "misses" (times we had to select random actions)
-
-        These statistics can be useful for tuning MCTS parameters and
-        understanding the search behavior.
+        Get statistics from the last decision made.
 
         Returns:
-            Tuple of (total_nodes, total_misses)
+            Tuple of (nodes_created_this_decision, misses_this_decision)
         """
-        total_nodes = len(self.tree)
-        total_misses = sum(node.miss for node in self.tree.values())
-        return total_nodes, total_misses
+        return self.nodes_created_this_decision, self.misses_this_decision

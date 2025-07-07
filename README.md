@@ -1,89 +1,208 @@
-# Aplicação de MCTS em Jogos com Informação Imperfeita
+# RIS-MCTS Application in Imperfect Information Games
 
-Esse projeto é uma implementação do jogo de Tarot Francês usando [Open Spiel](https://github.com/google-deepmind/open_spiel).
-O objetivo é fazer agentes usando variações de MCTS (Monte Carlo Search Tree) focados em Informação Imperfeita como "Information Set" e "Multiple Observer".
+This project is an implementation of French Tarot using [Open Spiel](https://github.com/google-deepmind/open_spiel).
+The goal is to create agents using MCTS (Monte Carlo Tree Search) variations focused on Imperfect Information such as "Re-determinization Information Set".
 
-## Tarot Francês
+## French Tarot
 
-O jogo foi implementado baseado na versão descrita no [Pagat](https://www.pagat.com/tarot/frtarot.html), é um jogo de cartas do tipo _trick-taking_, onde cara turno é um truque.
+The game was implemented based on the version described on [Pagat](https://www.pagat.com/tarot/frtarot.html), it is a trick-taking card game where each turn is a trick.
 
-** Nota: Apenas a versão para 4 jogadores foi implementada.
-### Baralho
+** Note: Only the 4-player version has been implemented.
+### Deck
 
-Tarot Francês é um jogo de cartas com baralho de 78 cartas, sendo: catorze cartas entre 4 **naipes**; um grupo de cartas **trunfos** de 1 a 21; mais a **Desculpa**.
-Os naipes são os mesmos que um baralho comum: Copas, Espadas, Ouros e Paus. Similar ao baralho comum, vão de Às a 10, mais o Valete, Cavaleiro, Rainha e Rei (em ordem).
-Dentre as cartas numeradas, apenas três se destacam: 1 _Le Petit_, 21 _Le Monde_, e 0 _Le Fou_ ou _L'excuse_. A Desculpa é muitas vezes considerada a carta de número 0. 
-Essas três cartas são finalizadoras, _oudlers_, e determinam como será calculada a pontuação final.
+French Tarot is a card game with a 78-card deck, consisting of: fourteen cards among 4 **suits**; a group of **trump** cards from 1 to 21; plus the **Excuse**.
+The suits are the same as a common deck: Hearts, Spades, Diamonds and Clubs. Similar to a common deck, they go from Ace to 10, plus Jack, Knight, Queen and King (in order).
+Among the numbered cards, only three stand out: 1 _Le Petit_, 21 _Le Monde_, and 0 _Le Fou_ or _L'excuse_. The Excuse is often considered the card number 0.
+These three cards are finishers, _oudlers_, and determine how the final score will be calculated.
 
-### Fluxo
+### Game Flow
 
-No início, uma pessoa é escolhida como _dealer_ para distribuir as cartas, são 18 cartas para cada e 6 viradas para baixo, _chien_ ou cachorro.
-É feita uma rodada de ofertas, cada uma contribuindo na pontuação final, as apostas são feitas no sentido anti-horário, começando a direita do _dealer_.
-* _Petit_ (Pequeno)
-* _Garde_ (Guarda)
-* _Garde sans chien_ (Guarda sem o cachorro)
-* _Garde contre chien_ (Guarda contra o cachorro)
+At the beginning, a person is chosen as _dealer_ to distribute the cards, 18 cards for each player and 6 face down, _chien_ or dog.
+A round of bids is made, each contributing to the final score, bets are made counterclockwise, starting to the right of the _dealer_.
+* _Petit_ (Small)
+* _Garde_ (Guard)
+* _Garde sans chien_ (Guard without the dog)
+* _Garde contre chien_ (Guard against the dog)
 
-#### Ofertas e Tomador
+#### Bids and Taker
 
-Após as ofertas serem feita, a oferta maior ganha e vira o _taker_, o tomador. 
-Ele será o jogador inicial e os outros jogadores são defensores que não podem deixar o tomador ganhar
-Ambos _petit_ e _garde_ o jogador vira o _chien_ para cima, mostrando as 6 cartas para todos verem.
-Então o tomador pode escolher cartas do _chien_ para adicionar para mão e deve descartas as mesma quantidades de cartas.
-O tomador não pode descartar cartas numeradas ou Reis.
-No _garde sans chien_ o tomador não vira as cartas, mas elas contam para a pontuação final como dele.
-Por fim, no _garde contre chien_ o tomador não vira as cartas, e elas serão contadas como se fossem do time defensor.
+After the bids are made, the highest bid wins and becomes the _taker_.
+They will be the starting player and the other players are defenders who cannot let the taker win.
+In both _petit_ and _garde_ the player turns the _chien_ face up, showing the 6 cards for everyone to see.
+Then the taker can choose cards from the _chien_ to add to their hand and must discard the same number of cards.
+The taker cannot discard numbered cards or Kings.
+In _garde sans chien_ the taker does not turn the cards, but they count towards their final score.
+Finally, in _garde contre chien_ the taker does not turn the cards, and they will be counted as if they belonged to the defending team.
 
-#### _Poignée_ e _Chelem_
+#### _Poignée_ and _Chelem_
 
-Antes de cada jogador começar a sua primeira jogada ele pode declarar duas coisas:
-* _Poignée_, punhado, mostrando cartas numeradas suficientes para conseguir bônus final
-* _Chelem_, declarando que o time vencerá ganhando todas as partidas
+Before each player starts their first play they can declare two things:
+* _Poignée_, handful, showing enough numbered cards to get final bonus
+* _Chelem_, declaring that the team will win by taking all tricks
 
-#### Truques
+#### Tricks
 
-O tomador inicia com uma cartas, todos os outros jogadores devem seguir o **naipe** ou **trunfo**.
-No caso do naipe, pode-se usar qualquer carta do mesmo naipe, porém no trunfo é obrigatório jogar um trunfo maior ou descartar qualquer carta se não tiver mais trunfos em mãos.
-Ganha o truque aquele que tiver o valor do naipe ou o número do trunfo maior, aquele truque vai para a pilha do tomador ou do time defensor, dependendo de quem ganhar.
+The taker starts with a card, all other players must follow **suit** or **trump**.
+In the case of suit, any card of the same suit can be used, but with trump it is mandatory to play a higher trump or discard any card if you have no more trumps in hand.
+The trick is won by whoever has the highest suit value or trump number, that trick goes to the taker's pile or the defending team, depending on who wins.
 
-#### A Desculpa e os Contratos
+#### The Excuse and Contracts
 
-A desculpa é uma escapatória caso você não tenha como seguir o naipe ou trunfo, ela não conta no truque e fica com o jogador que usou na pilha, porém o jogador deve substituir com uma carta de baixo valor como substituto.
-Se a desculpa for usada no truque final existem duas possíveis regras: de acordo com Pagat fica com o time que ganhou truque, de acordo com o as regras da Federação Francesa de Tarot, o truque vai para o time adversário.
+The excuse is an escape route in case you have no way to follow suit or trump, it doesn't count in the trick and stays with the player who used it in the pile, but the player must substitute it with a low-value card as replacement.
+If the excuse is used in the final trick there are two possible rules: according to Pagat it stays with the team that won the trick, according to the French Tarot Federation rules, the trick goes to the opposing team.
 
-Dependendo da quantidade de _oudlers_ o tomador tiver, ele precisa alcançar uma certa quantidade de pontos totais:
+Depending on the number of _oudlers_ the taker has, they need to reach a certain amount of total points:
 * Zero _oudlers_: 56
-* Um _oudler_: 51
-* Dois _oudlers_: 41
-* Trê _oudlers_: 36
+* One _oudler_: 51
+* Two _oudlers_: 41
+* Three _oudlers_: 36
 
-As cartas valem:
-* Às a 10: 0.5 pontos
-* Valete: 1.5 pontos
-* Cavaleiro: 2.5 pontos
-* Rainha: 3.5 pontos
-* Rei: 4.5 pontos
-* _Le Fou_ (0), _Le Petit_ (1) e _Le Monde_ (21): 4.5 pontos
-* Outras cartas numeradas: 0.5 pontos
+Cards are worth:
+* Ace to 10: 0.5 points
+* Jack: 1.5 points
+* Knight: 2.5 points
+* Queen: 3.5 points
+* King: 4.5 points
+* _Le Fou_ (0), _Le Petit_ (1) and _Le Monde_ (21): 4.5 points
+* Other numbered cards: 0.5 points
 
-### Pontuação
-A fórmula final é a seguinte:
+### Scoring
+The final formula is as follows:
 `((25 + pt + pb) * mu) + pg + ch`
 
-Onde **pt** é se no último truque foi usado o _le petit_, **pb** é a diferença entre a pontuação necessária para ganhar e a pontuação de truques ganho.
+Where **pt** is if _le petit_ was used in the last trick, **pb** is the difference between the score needed to win and the score from tricks won.
 
-O **mu** é o multiplicador da oferta:
+The **mu** is the bid multiplier:
 * _Petit_ 1x
 * _Garde_ 2x
 * _Garde sans chien_ 4x
 * _Garde contre chien_ 6x
 
-Os bônus **pg** e **ch** são o punhado e o _chelem_. O punhado se declarado vale:
-* 10 trunfos: 20 pontos
-* 13 trunfos: 30 pontos
-* 15 trunfos: 40 pontos
-O _chelem_ vale 400 pontos se declarado **e** conquistado ou 200 pontos se não declarado. Caso declarado e não conquistado, o declarador perde 200 pontos.
+The bonuses **pg** and **ch** are the handful and the _chelem_. The handful if declared is worth:
+* 10 trumps: 20 points
+* 13 trumps: 30 points
+* 15 trumps: 40 points
+The _chelem_ is worth 400 points if declared **and** achieved or 200 points if not declared. If declared and not achieved, the declarer loses 200 points.
 
-### Contabilizando
-O jogo é do formato *zero-sum*, ou seja, a pontuação soma zero, os pontos são divididos igualmente entre o time defensor e o tomador.
-Se o tomador ganha, ele deduz pontos dos outros jogadores, se o tomador perde, ele perde pontos e os defensores ganham igualmente.
+### Accounting
+The game is *zero-sum* format, meaning the score sums to zero, points are divided equally between the defending team and the taker.
+If the taker wins, they deduct points from the other players, if the taker loses, they lose points and the defenders gain equally.
+
+## MCTS Comparison Tool
+
+This project includes a comprehensive tool for comparing different MCTS configurations to optimize performance in Tarot gameplay.
+
+### Basic Usage
+
+```bash
+# Run default parameter sweep comparison (saves plots only)
+python mcts_comparison.py
+
+# Run with custom number of games and display plots interactively
+python mcts_comparison.py --games 100 --show
+
+# Run with custom seed and output directory
+python mcts_comparison.py --games 200 --seed 123 --output-dir my_results
+
+# Show plots interactively and save to custom directory
+python mcts_comparison.py --show --output-dir my_results
+```
+
+### Parameter Sweeps
+
+The tool supports several types of parameter sweeps:
+
+#### Iterations Sweep
+```bash
+python mcts_comparison.py --sweep-type iterations --iterations 50 100 200 500
+```
+
+#### Exploration Constant Sweep
+```bash
+python mcts_comparison.py --sweep-type exploration --exploration 0.5 1.0 1.4 2.0
+```
+
+#### Progressive Widening Alpha Sweep
+```bash
+python mcts_comparison.py --sweep-type pw_alpha --pw-alpha 0.2 0.5 0.8
+```
+
+#### Full Grid Search
+```bash
+python mcts_comparison.py --sweep-type grid --iterations 100 200 --exploration 1.0 1.4 --pw-alpha 0.5 0.7
+```
+
+### Output Options
+
+- `--show`: Display plots interactively (default is save-only)
+- `--verbose`: Enable detailed output during execution
+- `--output-dir`: Specify custom output directory (default: `results`)
+
+### Output Files
+
+The tool generates three types of output:
+
+1. **Visual plots** (`mcts_parameter_comparison.png`): Comparison charts showing win rates and performance metrics
+2. **Text report** (`mcts_comparison_report.txt`): Detailed analysis of each configuration's performance
+3. **Raw data** (`mcts_comparison_metrics.json`): Complete dataset for further analysis
+
+### Configuration Parameters
+
+- `--iterations`: Number of MCTS iterations per decision
+- `--exploration`: UCB exploration constant (typically 1.0-2.0)
+- `--pw-alpha`: Progressive widening alpha parameter (0.0-1.0)
+- `--pw-constant`: Progressive widening constant (default: 2.0)
+- `--games`: Number of games to simulate per configuration (default: 200)
+- `--seed`: Random seed for reproducible results (default: 42)
+
+Use `python mcts_comparison.py --help` for complete argument reference.
+
+## Basic Plotting Tool
+
+The project includes a plotting tool for visualizing game metrics and comparing strategy performance.
+
+### Basic Usage
+
+```bash
+# Generate all plots from default metrics file (saves plots only)
+python plot_basic.py
+
+# Display plots interactively and use custom metrics file
+python plot_basic.py --show --input results/my_metrics.json --output my_plots
+
+# Generate only specific plot types with game count validation
+python plot_basic.py --plot-types win_rates legal_moves --games 200
+
+# Include only specific strategies and show plots interactively
+python plot_basic.py --strategies random ris_mcts --games 100 --show
+
+# Save plots to custom directory without displaying them
+python plot_basic.py --output batch_plots --games 300
+```
+
+### Available Plot Types
+
+- **`win_rates`**: Bar charts showing taker and defender win rates by strategy
+- **`legal_moves`**: Line plot showing legal moves growth during games (smoothed)
+- **`decision_times`**: RIS-MCTS decision time progression through games
+- **`mcts_comparison`**: Comparison of different MCTS configurations
+
+### Command Line Options
+
+- `--input, -i`: Path to input metrics JSON file (default: `results/simulation_metrics.json`)
+- `--output, -o`: Output directory for plots (default: `plots`)
+- `--games`: Expected number of games per strategy (for validation and display)
+- `--strategies`: Specific strategies to include (`random`, `max_card`, `min_card`, `ris_mcts`)
+- `--plot-types`: Specific plot types to generate
+- `--show`: Display plots interactively (default is save-only)
+- `--verbose, -v`: Enable detailed output
+
+### Output Files
+
+All plots are saved as high-resolution PNG files:
+- `win_rates.png`: Strategy comparison charts
+- `legal_moves_growth.png`: Game progression analysis
+- `decision_times.png`: MCTS performance metrics
+- `mcts_comparison.png`: MCTS configuration comparison
+
+Use `python plot_basic.py --help` for complete usage information.
