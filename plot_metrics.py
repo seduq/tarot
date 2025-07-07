@@ -1,7 +1,6 @@
 import os
 from simulation import (
-    StrategyType, compare_strategies, GameMetrics,
-    aggregate_metrics, main as simulation_main
+    StrategyType, main as simulation_main
 )
 import json
 from typing import Dict, List, Any
@@ -12,23 +11,17 @@ import matplotlib
 import warnings
 
 
-def run_simulation_and_collect_data(iterations: int = 200, games_per_strategy: int = 10) -> Dict[str, Any]:
+def run_simulation_and_collect_data(iterations: int = 200, games_per_strategy: int = 10):
     """Run the simulation and collect comprehensive data"""
     print("Running simulation to collect plotting data...")
-
     strategies = [
-        StrategyType.IS_MCTS_PER_ACTION,
-        StrategyType.IS_MCTS_PER_TRICK
+        StrategyType.RANDOM,
+        StrategyType.MAX_CARD,
+        StrategyType.MIN_CARD,
+        StrategyType.RIS_MCTS
     ]
 
-    results = compare_strategies(
-        strategies=strategies,
-        iterations=iterations,
-        games_per_strategy=games_per_strategy,
-        verbose=False  # Reduce output for cleaner plotting
-    )
-
-    return results
+    simulation_main()
 
 
 def create_time_metrics_plot(results: Dict[str, Any], save_path: str = "plot/time_metrics.png"):
@@ -648,15 +641,17 @@ def main():
     print("Tarot Strategy Metrics Visualization")
     print("=" * 50)
 
-    # Use a backend that doesn't require display (for server environments)
-    matplotlib.use('Agg')
-    os.makedirs("plot", exist_ok=True)  # Ensure plot directory exists
-
-    # Run simulation to collect data
-    results = run_simulation_and_collect_data(
+    run_simulation_and_collect_data(
         iterations=200,  # MCTS iterations per decision
         games_per_strategy=5  # Number of games per strategy for faster plotting
     )
+
+
+def plot_metrics(results: Dict[str, Any]):
+    # Use a backend that doesn't require display (for server environments)
+    matplotlib.use('Agg')
+    os.makedirs("plot", exist_ok=True)  # Ensure plot directory exists
+    # Run simulation to collect data
 
     # Save results for future use
     save_results_to_json(results)

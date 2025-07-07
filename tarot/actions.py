@@ -17,6 +17,8 @@ class Action:
         Returns the list of legal cards that can be played from the hand given the current trick.
         Enforces following suit and trump rules according to Tarot rules.
         """
+        trick = trick.copy()
+        trick = [t for t in trick if t != -1]
         legal_actions = legal_actions.copy()
         if len(trick) == 0:
             return legal_actions

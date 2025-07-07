@@ -1,5 +1,6 @@
+from dataclasses import dataclass
 from tarot import Tarot
-from tarot.mcts import TarotISMCTSAgent, ISMCTSStrategy
+from tarot.mcts import TarotISMCTSAgent
 from tarot.constants import Phase
 from tarot import Const
 import random
@@ -11,239 +12,21 @@ from typing import Dict, List, Any, Callable
 from enum import Enum
 
 
-SEED = 7264828
-
-
 class StrategyType(Enum):
     """Available strategy types"""
     RANDOM = "random"
     MAX_CARD = "max_card"
     MIN_CARD = "min_card"
-    IS_MCTS_PER_ACTION = "is_mcts_per_action"
-    IS_MCTS_PER_TRICK = "is_mcts_per_trick"
+    RIS_MCTS = "ris_mcts"
 
 
-class GameMetrics:
-    """Class to track comprehensive game metrics"""
-
-    def __init__(self):
-        self.reset()
-
-    def reset(self):
-        # Time metrics
-        self.total_time = 0.0
-        self.decision_times = []
-        self.chance_times = []
-
-        # Decision metrics
-        self.total_decisions = 0
-        self.total_chance_decisions = 0
-        self.decisions_per_phase = defaultdict(int)
-        self.legal_actions_count = []
-        self.chance_actions_count = []
-
-        # Cumulative metrics over time
-        self.cumulative_decisions = []  # Running total of decisions
-        self.cumulative_legal_actions = []  # Running total of legal actions encountered
-        self.cumulative_nodes_created = []  # Running total of nodes created
-
-        # Win rate metrics
-        self.wins_as_taker = 0
-        self.losses_as_taker = 0
-        self.wins_as_defender = 0
-        self.losses_as_defender = 0
-        self.total_games_as_taker = 0
-        self.total_games_as_defender = 0
-
-        # MCTS specific metrics
-        self.total_node_visits = 0
-        self.total_nodes_created = 0
-        self.tree_sizes = []
-        self.simulation_counts = []
-        self.total_trees_created = 0
-        self.trees_created_counts = []
-
-        # Memory metrics
-        self.peak_memory_usage = 0
-        self.memory_samples = []
-
-        # Game state metrics
-        self.phases_visited = set()
-        self.tricks_played = 0
-        self.cards_played = 0
-
-        # Performance metrics
-        self.decisions_per_second = 0
-        self.average_decision_time = 0
-        self.average_legal_actions = 0
-        self.average_chance_actions = 0
-
-    def add_decision(self, decision_time: float, num_legal_actions: int, phase: Phase):
-        """Record a decision made"""
-        self.decision_times.append(decision_time)
-        self.total_decisions += 1
-        self.decisions_per_phase[phase] += 1
-        self.legal_actions_count.append(num_legal_actions)
-        self.phases_visited.add(phase)
-
-        # Update cumulative metrics
-        self.cumulative_decisions.append(self.total_decisions)
-        total_legal_actions = sum(self.legal_actions_count)
-        self.cumulative_legal_actions.append(total_legal_actions)
-
-    def add_chance_decision(self, decision_time: float, num_chance_actions: int):
-        """Record a chance decision made"""
-        self.chance_times.append(decision_time)
-        self.total_chance_decisions += 1
-        self.chance_actions_count.append(num_chance_actions)
-
-    def add_mcts_metrics(self, node_visits: int, nodes_created: int, tree_size: int, simulations: int, trees_created: int = 0):
-        """Record MCTS-specific metrics"""
-        self.total_node_visits += node_visits
-        self.total_nodes_created += nodes_created
-        self.tree_sizes.append(tree_size)
-        self.simulation_counts.append(simulations)
-        self.total_trees_created += trees_created
-        self.trees_created_counts.append(trees_created)
-
-        # Update cumulative nodes created
-        self.cumulative_nodes_created.append(self.total_nodes_created)
-
-    def add_game_result(self, player_id: int, taker_id: int, player_won: bool):
-        """Record a game result for win rate tracking"""
-        if player_id == taker_id:
-            # Player was the taker
-            self.total_games_as_taker += 1
-            if player_won:
-                self.wins_as_taker += 1
-            else:
-                self.losses_as_taker += 1
-        else:
-            # Player was a defender
-            self.total_games_as_defender += 1
-            if player_won:
-                self.wins_as_defender += 1
-            else:
-                self.losses_as_defender += 1
-
-    def get_win_rates(self):
-        """Calculate win rates for taker and defender scenarios"""
-        taker_win_rate = self.wins_as_taker / \
-            self.total_games_as_taker if self.total_games_as_taker > 0 else 0.0
-        defender_win_rate = self.wins_as_defender / \
-            self.total_games_as_defender if self.total_games_as_defender > 0 else 0.0
-        overall_win_rate = (self.wins_as_taker + self.wins_as_defender) / (self.total_games_as_taker +
-                                                                           self.total_games_as_defender) if (self.total_games_as_taker + self.total_games_as_defender) > 0 else 0.0
-
-        return {
-            'taker_win_rate': taker_win_rate,
-            'defender_win_rate': defender_win_rate,
-            'overall_win_rate': overall_win_rate,
-            'games_as_taker': self.total_games_as_taker,
-            'games_as_defender': self.total_games_as_defender,
-            'total_games': self.total_games_as_taker + self.total_games_as_defender
-        }
-
-    def sample_memory(self):
-        """Sample current memory usage"""
-        process = psutil.Process(os.getpid())
-        memory_mb = process.memory_info().rss / 1024 / 1024
-        self.memory_samples.append(memory_mb)
-        self.peak_memory_usage = max(self.peak_memory_usage, memory_mb)
-
-    def finalize(self, total_game_time: float):
-        """Calculate final metrics"""
-        self.total_time = total_game_time
-
-        if self.decision_times:
-            self.average_decision_time = sum(
-                self.decision_times) / len(self.decision_times)
-            self.decisions_per_second = len(
-                self.decision_times) / total_game_time if total_game_time > 0 else 0
-
-        if self.legal_actions_count:
-            self.average_legal_actions = sum(
-                self.legal_actions_count) / len(self.legal_actions_count)
-
-        if self.chance_actions_count:
-            self.average_chance_actions = sum(
-                self.chance_actions_count) / len(self.chance_actions_count)
-
-    def print_summary(self, strategy_name: str):
-        """Print comprehensive metrics summary"""
-        print(f"\n{'='*60}")
-        print(f"METRICS SUMMARY: {strategy_name}")
-        print(f"{'='*60}")
-
-        # Time metrics
-        print(f"Total game time: {self.total_time:.3f}s")
-        print(f"Average decision time: {self.average_decision_time:.4f}s")
-        print(f"Decisions per second: {self.decisions_per_second:.1f}")
-
-        # Decision metrics
-        print(f"\nDecision Counts:")
-        print(f"  Total decisions: {self.total_decisions}")
-        print(f"  Total chance decisions: {self.total_chance_decisions}")
-        print(f"  Average legal actions: {self.average_legal_actions:.1f}")
-        print(f"  Average chance actions: {self.average_chance_actions:.1f}")
-
-        # Phase breakdown
-        print(f"\nDecisions per phase:")
-        for phase, count in self.decisions_per_phase.items():
-            print(f"  {phase}: {count}")
-
-        # MCTS metrics (if applicable)
-        if self.total_node_visits > 0 or self.total_nodes_created > 0:
-            print(f"\nMCTS Metrics:")
-            print(f"  Total node visits: {self.total_node_visits:,}")
-            print(f"  Total nodes created: {self.total_nodes_created:,}")
-            if self.tree_sizes:
-                avg_tree_size = sum(self.tree_sizes) / len(self.tree_sizes)
-                max_tree_size = max(self.tree_sizes)
-                print(f"  Average tree size: {avg_tree_size:.0f}")
-                print(f"  Maximum tree size: {max_tree_size}")
-            else:
-                print(f"  Tree sizes: N/A")
-            if self.total_trees_created > 0:
-                print(f"  Total trees created: {self.total_trees_created:,}")
-                if self.trees_created_counts:
-                    avg_trees_per_decision = sum(
-                        self.trees_created_counts) / len(self.trees_created_counts)
-                    print(
-                        f"  Average trees per decision: {avg_trees_per_decision:.1f}")
-            if self.simulation_counts:
-                total_sims = sum(self.simulation_counts)
-                avg_sims = total_sims / len(self.simulation_counts)
-                print(f"  Total simulations: {total_sims:,}")
-                print(f"  Average simulations per decision: {avg_sims:.0f}")
-            else:
-                print(f"  Simulations: N/A")
-
-        # Memory metrics
-        print(f"\nMemory Usage:")
-        print(f"  Peak memory: {self.peak_memory_usage:.1f} MB")
-        print(
-            f"  Average memory: {sum(self.memory_samples)/len(self.memory_samples):.1f} MB" if self.memory_samples else "N/A")
-
-        # Game state metrics
-        print(f"\nGame State:")
-        print(f"  Phases visited: {[str(p) for p in self.phases_visited]}")
-        print(f"  Cards played: {self.cards_played}")
-        print(f"  Tricks completed: {self.tricks_played}")
-
-        # Win rate metrics
-        win_rates = self.get_win_rates()
-        if win_rates['total_games'] > 0:
-            print(f"\nWin Rate Metrics:")
-            print(f"  Overall win rate: {win_rates['overall_win_rate']:.1%}")
-            if win_rates['games_as_taker'] > 0:
-                print(
-                    f"  Win rate as taker: {win_rates['taker_win_rate']:.1%} ({self.wins_as_taker}/{win_rates['games_as_taker']})")
-            if win_rates['games_as_defender'] > 0:
-                print(
-                    f"  Win rate as defender: {win_rates['defender_win_rate']:.1%} ({self.wins_as_defender}/{win_rates['games_as_defender']})")
-            print(f"  Games as taker: {win_rates['games_as_taker']}")
-            print(f"  Games as defender: {win_rates['games_as_defender']}")
+@dataclass
+class ISMCTSConfig:
+    """Configuration for StrategyAgent"""
+    iterations: int = 100
+    exploration_constant: float = 1.4
+    pw_alpha: float = 0.5
+    pw_constant: float = 2.0
 
 
 class StrategyAgent:
@@ -252,15 +35,10 @@ class StrategyAgent:
     def __init__(self, player_id: int, strategy_type: StrategyType):
         self.player_id = player_id
         self.strategy_type = strategy_type
-        self.metrics = GameMetrics()
 
     def get_action(self, state: Tarot) -> int:
         """Get action from the strategy"""
-        start_time = time.time()
         legal_actions = state.legal_actions()
-
-        # Sample memory
-        self.metrics.sample_memory()
 
         if self.strategy_type == StrategyType.RANDOM:
             action = random.choice(legal_actions)
@@ -283,13 +61,6 @@ class StrategyAgent:
             # Should not reach here for base strategies
             action = random.choice(legal_actions)
 
-        decision_time = time.time() - start_time
-        self.metrics.add_decision(
-            decision_time, len(legal_actions), state.phase)
-
-        # For non-MCTS strategies, nodes created is always 0
-        self.metrics.cumulative_nodes_created.append(0)
-
         return action
 
 
@@ -299,395 +70,101 @@ class MCTSStrategyAgent(StrategyAgent):
     def __init__(self,
                  player_id: int,
                  strategy_type: StrategyType,
-                 iterations: int = 300,
-                 num_determinizations: int = 1):
+                 config: ISMCTSConfig
+                 ):
         super().__init__(player_id, strategy_type)
-        self.iterations = iterations
+        self.iterations = config.iterations
+        self.exploration_constant = config.exploration_constant
+        self.pw_alpha = config.pw_alpha
+        self.pw_constant = config.pw_constant
 
-        # Create appropriate IS-MCTS agent
-        if strategy_type == StrategyType.IS_MCTS_PER_ACTION:
-            self.mcts_agent = TarotISMCTSAgent(
-                player_id=player_id,
-                iterations=iterations,
-                num_determinizations=num_determinizations,
-                strategy=ISMCTSStrategy.PER_ACTION
-            )
-        elif strategy_type == StrategyType.IS_MCTS_PER_TRICK:
-            self.mcts_agent = TarotISMCTSAgent(
-                player_id=player_id,
-                iterations=iterations,
-                num_determinizations=num_determinizations,
-                strategy=ISMCTSStrategy.PER_TRICK
-            )
+        self.mcts_agent = TarotISMCTSAgent(
+            player=player_id,
+            iterations=self.iterations,
+            exploration_constant=self.exploration_constant,
+            pw_alpha=self.pw_alpha,
+            pw_constant=self.pw_constant,
+        )
 
     def get_action(self, state: Tarot) -> int:
         """Get action using IS-MCTS"""
-        start_time = time.time()
-        legal_actions = state.legal_actions()
-
-        # Sample memory
-        self.metrics.sample_memory()
-
         # Get action from MCTS agent
-        action = self.mcts_agent.get_action(state)
-
-        decision_time = time.time() - start_time
-        self.metrics.add_decision(
-            decision_time, len(legal_actions), state.phase)
-
-        # Record MCTS specific metrics using new tree stats
-        tree_stats = self.mcts_agent.get_tree_stats()
-        self.metrics.add_mcts_metrics(
-            node_visits=tree_stats['total_visits'],
-            nodes_created=tree_stats['nodes_created_this_decision'],
-            tree_size=tree_stats['total_nodes'],
-            simulations=tree_stats['simulations_this_decision'],
-            trees_created=tree_stats.get('trees_created_this_decision', 0)
-        )
-
+        action = self.mcts_agent.run(state)
         return action
 
 
-def create_agent(player_id: int,
-                 strategy_type: StrategyType,
-                 iterations: int = 300,
-                 num_determinizations=20,) -> StrategyAgent:
-    """Factory function to create appropriate agent"""
-    if strategy_type in [StrategyType.IS_MCTS_PER_ACTION, StrategyType.IS_MCTS_PER_TRICK]:
-        return MCTSStrategyAgent(player_id, strategy_type, iterations, num_determinizations)
-    else:
-        return StrategyAgent(player_id, strategy_type)
-
-
-def play_with_strategy(strategy_type: StrategyType,
-                       verbose: bool = True,
-                       iterations: int = 300,
-                       num_determinizations: int = 20,
-                       position: int = 0) -> GameMetrics:
+def play_with_strategy(strategy_type: StrategyType, config: ISMCTSConfig):
     """Play a single game with the specified strategy"""
     state = Tarot()
-    random.seed(SEED)
+    agents = []
+
+    # Randomly select a player position for the test agent
+    position = random.randint(0, Const.NUM_PLAYERS - 1)
 
     # Create agent for player with the specified strategy
-    agent = create_agent(0, strategy_type, iterations, num_determinizations)
-
-    # Create simple random agents for other players
-    agents = [create_agent(i, StrategyType.RANDOM)
-              for i in range(Const.NUM_PLAYERS - 1)]
-    if position < 3:
-        agents.insert(position, agent)  # Add our strategy agent last
-    else:
-        agents.append(agent)  # Add our strategy agent first
-
-    # Assign strategy agent's player ID
-    agent.player_id = agents.index(agent)
-
-    for i, a in enumerate(agents):
-        print(f"Player {i} using strategy: {a.strategy_type.value}")
-
-    game_start_time = time.time()
-
-    if verbose:
-        print(f"\nStarting game with strategy: {strategy_type.value}")
-        print(state)
-        print("=" * 50)
+    for i in range(Const.NUM_PLAYERS):
+        if i == position and strategy_type == StrategyType.RIS_MCTS:
+            # Use MCTS agent for the specified player
+            agents.append(MCTSStrategyAgent(i, strategy_type, config))
+        else:
+            # Use basic strategy agent for other players
+            strategies = [
+                StrategyType.RANDOM,
+                StrategyType.MAX_CARD,
+                StrategyType.MIN_CARD,]
+            # Randomly assign a basic strategy to other players
+            strategy = random.choice(strategies)
+            agents.append(StrategyAgent(i, strategy))
 
     iteration = 0
-    while not state.is_terminal() and iteration < 100:  # Limit iterations for safety
+    while not state.is_terminal() and iteration < 150:  # Limit iterations for safety
         iteration += 1
 
-        if verbose:
-            print("--" * 25)
-            print(f"Iteration: {iteration}")
-            print(f"Current player: {state.current}")
-            print(f"Current phase: {state.phase}")
-
-        # Sample memory periodically
-        if iteration % 10 == 0:
-            agent.metrics.sample_memory()
-
         if state.is_chance_node():
-            # Handle chance nodes
-            start_time = time.time()
-
-            if verbose:
-                print(f"Chance outcomes: {state.chance_outcomes()}")
-
             outcomes = state.chance_outcomes()
             actions, probs = zip(*outcomes)
             action = random.choices(actions, weights=probs)[0]
-
-            decision_time = time.time() - start_time
-            agent.metrics.add_chance_decision(decision_time, len(actions))
-
         else:
             # Handle regular decisions
             legal_actions = state.legal_actions()
-
-            if verbose:
-                print(f"Legal actions: {legal_actions}")
-
             if not legal_actions:
-                if verbose:
-                    print("No legal actions available")
                 break
 
             # Get action from appropriate agent
             current_agent = agents[state.current]
             action = current_agent.get_action(state)
 
-            # Track additional metrics for our main agent
-            if state.current == agent.player_id:
-                if state.phase == Phase.TRICK:
-                    agent.metrics.cards_played += 1
-
-        if verbose:
-            print(f'Taking action {action} {state.action_to_string(action)}')
-
         # Apply action and advance state
-        try:
-            state.apply_action(action)
-            state.next()
-        except Exception as e:
-            if verbose:
-                print(f"Error applying action: {e}")
-            break
-
-    # Finalize metrics
-    total_game_time = time.time() - game_start_time
-    agent.metrics.finalize(total_game_time)
-
-    # Track game result for win rate calculation
-    if state.is_terminal():
-        returns = state.returns()
-        taker_id = state.taker
-        # Agent's result (1.0 = win, 0.0 = loss)
-        player_won = returns[agent.player_id] > 0.5
-        agent.metrics.add_game_result(agent.player_id, taker_id, player_won)
-
-    if verbose:
-        print(state)
-        agent.metrics.print_summary(strategy_type.value)
-
-    return agent.metrics
-
-
-def compare_strategies(strategies: List[StrategyType], iterations: int = 500, games_per_strategy: int = 1,
-                       determinizations=20, verbose: bool = False) -> Dict[str, Any]:
-    """Compare multiple strategies across multiple games"""
-    print(f"\n{'='*80}")
-    print(f"STRATEGY COMPARISON - {games_per_strategy} game(s) per strategy")
-    print(f"MCTS iterations per decision: {iterations}")
-    print(f"{'='*80}")
-
-    results = {}
-
-    for strategy in strategies:
-        print(f"\n{'-'*60}")
-        print(f"Testing strategy: {strategy.value.upper()}")
-        print(f"{'-'*60}")
-
-        strategy_metrics = []
-
-        for game_num in range(games_per_strategy):
-            if games_per_strategy > 1:
-                print(f"\nGame {game_num + 1}/{games_per_strategy}")
-
-            metrics = play_with_strategy(
-                strategy, verbose=verbose, iterations=iterations,
-                num_determinizations=determinizations, position=game_num % 4)
-            strategy_metrics.append(metrics)
-
-        # Aggregate metrics across games
-        if strategy_metrics:
-            avg_metrics = aggregate_metrics(strategy_metrics, strategy.value)
-            results[strategy.value] = avg_metrics
-
-            if games_per_strategy > 1:
-                print_aggregated_results(avg_metrics, strategy.value)
-
-    # Print final comparison
-    print_strategy_comparison(results)
-
-    return results
-
-
-def aggregate_metrics(metrics_list: List[GameMetrics], strategy_name: str) -> Dict[str, Any]:
-    """Aggregate metrics across multiple games"""
-    if not metrics_list:
-        return {}
-
-    n_games = len(metrics_list)
-
-    # Aggregate cumulative data (take the longest sequence and average across games)
-    max_decisions = max(len(m.cumulative_decisions)
-                        for m in metrics_list) if metrics_list else 0
-    avg_cumulative_decisions = []
-    avg_cumulative_legal_actions = []
-    avg_cumulative_nodes_created = []
-
-    for i in range(max_decisions):
-        decisions_at_step = [m.cumulative_decisions[i]
-                             for m in metrics_list if i < len(m.cumulative_decisions)]
-        legal_actions_at_step = [m.cumulative_legal_actions[i]
-                                 for m in metrics_list if i < len(m.cumulative_legal_actions)]
-        nodes_at_step = [m.cumulative_nodes_created[i]
-                         for m in metrics_list if i < len(m.cumulative_nodes_created)]
-
-        if decisions_at_step:
-            avg_cumulative_decisions.append(
-                sum(decisions_at_step) / len(decisions_at_step))
-        if legal_actions_at_step:
-            avg_cumulative_legal_actions.append(
-                sum(legal_actions_at_step) / len(legal_actions_at_step))
-        if nodes_at_step:
-            avg_cumulative_nodes_created.append(
-                sum(nodes_at_step) / len(nodes_at_step))
-
-    # Aggregate win rate metrics
-    total_wins_as_taker = sum(m.wins_as_taker for m in metrics_list)
-    total_losses_as_taker = sum(m.losses_as_taker for m in metrics_list)
-    total_wins_as_defender = sum(m.wins_as_defender for m in metrics_list)
-    total_losses_as_defender = sum(m.losses_as_defender for m in metrics_list)
-    total_games_as_taker = sum(m.total_games_as_taker for m in metrics_list)
-    total_games_as_defender = sum(
-        m.total_games_as_defender for m in metrics_list)
-
-    # Calculate aggregated win rates
-    taker_win_rate = total_wins_as_taker / \
-        total_games_as_taker if total_games_as_taker > 0 else 0.0
-    defender_win_rate = total_wins_as_defender / \
-        total_games_as_defender if total_games_as_defender > 0 else 0.0
-    overall_win_rate = (total_wins_as_taker + total_wins_as_defender) / (total_games_as_taker +
-                                                                         total_games_as_defender) if (total_games_as_taker + total_games_as_defender) > 0 else 0.0
-
-    return {
-        'strategy': strategy_name,
-        'games_played': n_games,
-        'avg_total_time': sum(m.total_time for m in metrics_list) / n_games,
-        'avg_decision_time': sum(m.average_decision_time for m in metrics_list) / n_games,
-        'avg_decisions_per_second': sum(m.decisions_per_second for m in metrics_list) / n_games,
-        'avg_total_decisions': sum(m.total_decisions for m in metrics_list) / n_games,
-        'avg_chance_decisions': sum(m.total_chance_decisions for m in metrics_list) / n_games,
-        'avg_legal_actions': sum(m.average_legal_actions for m in metrics_list) / n_games,
-        'avg_chance_actions': sum(m.average_chance_actions for m in metrics_list) / n_games,
-        'avg_node_visits': sum(m.total_node_visits for m in metrics_list) / n_games,
-        'avg_nodes_created': sum(m.total_nodes_created for m in metrics_list) / n_games,
-        'avg_trees_created': sum(m.total_trees_created for m in metrics_list) / n_games,
-        'avg_peak_memory': sum(m.peak_memory_usage for m in metrics_list) / n_games,
-        'avg_cards_played': sum(m.cards_played for m in metrics_list) / n_games,
-        'avg_tricks_played': sum(m.tricks_played for m in metrics_list) / n_games,
-        # Cumulative time-series data
-        'cumulative_decisions': avg_cumulative_decisions,
-        'cumulative_legal_actions': avg_cumulative_legal_actions,
-        'cumulative_nodes_created': avg_cumulative_nodes_created,
-        # Win rate metrics
-        'taker_win_rate': taker_win_rate,
-        'defender_win_rate': defender_win_rate,
-        'overall_win_rate': overall_win_rate,
-        'total_wins_as_taker': total_wins_as_taker,
-        'total_losses_as_taker': total_losses_as_taker,
-        'total_wins_as_defender': total_wins_as_defender,
-        'total_losses_as_defender': total_losses_as_defender,
-        'total_games_as_taker': total_games_as_taker,
-        'total_games_as_defender': total_games_as_defender,
-    }
-
-
-def print_aggregated_results(metrics: Dict[str, Any], strategy_name: str):
-    """Print aggregated results for a strategy"""
-    print(f"\nAGGREGATED RESULTS: {strategy_name}")
-    print(f"Games played: {metrics['games_played']}")
-    print(f"Avg game time: {metrics['avg_total_time']:.3f}s")
-    print(f"Avg decision time: {metrics['avg_decision_time']:.4f}s")
-    print(f"Avg decisions/sec: {metrics['avg_decisions_per_second']:.1f}")
-    print(f"Avg peak memory: {metrics['avg_peak_memory']:.1f} MB")
-
-    # Win rate metrics
-    print(f"\nWin Rate Summary:")
-    print(f"Overall win rate: {metrics['overall_win_rate']:.1%}")
-    if metrics['total_games_as_taker'] > 0:
-        print(
-            f"Win rate as taker: {metrics['taker_win_rate']:.1%} ({metrics['total_wins_as_taker']}/{metrics['total_games_as_taker']})")
-    if metrics['total_games_as_defender'] > 0:
-        print(
-            f"Win rate as defender: {metrics['defender_win_rate']:.1%} ({metrics['total_wins_as_defender']}/{metrics['total_games_as_defender']})")
-
-    if metrics['avg_node_visits'] > 0:
-        print(f"\nMCTS Metrics:")
-        print(f"Avg node visits: {metrics['avg_node_visits']:,.0f}")
-        print(f"Avg nodes created: {metrics['avg_nodes_created']:,.0f}")
-        if metrics['avg_trees_created'] > 0:
-            print(f"Avg trees created: {metrics['avg_trees_created']:,.0f}")
-
-
-def print_strategy_comparison(results: Dict[str, Any]):
-    """Print final comparison table"""
-    if not results:
-        return
-
-    print(f"\n{'='*120}")
-    print("FINAL STRATEGY COMPARISON")
-    print(f"{'='*120}")
-
-    # Table header
-    print(f"{'Strategy':<20} {'Time(s)':<8} {'Dec/s':<8} {'Memory(MB)':<12} {'Win Rate':<10} {'Taker WR':<10} {'Defender WR':<12} {'Nodes':<10}")
-    print("-" * 120)
-
-    # Sort by overall win rate (descending)
-    sorted_results = sorted(
-        results.items(), key=lambda x: x[1].get('overall_win_rate', 0), reverse=True)
-
-    for strategy_name, metrics in sorted_results:
-        nodes_str = f"{metrics['avg_nodes_created']:,.0f}" if metrics['avg_nodes_created'] > 0 else "N/A"
-        overall_wr = f"{metrics['overall_win_rate']:.1%}" if metrics.get(
-            'overall_win_rate') is not None else "N/A"
-        taker_wr = f"{metrics['taker_win_rate']:.1%}" if metrics.get(
-            'taker_win_rate') is not None and metrics['total_games_as_taker'] > 0 else "N/A"
-        defender_wr = f"{metrics['defender_win_rate']:.1%}" if metrics.get(
-            'defender_win_rate') is not None and metrics['total_games_as_defender'] > 0 else "N/A"
-
-        print(f"{strategy_name:<20} "
-              f"{metrics['avg_total_time']:<8.3f} "
-              f"{metrics['avg_decisions_per_second']:<8.1f} "
-              f"{metrics['avg_peak_memory']:<12.1f} "
-              f"{overall_wr:<10} "
-              f"{taker_wr:<10} "
-              f"{defender_wr:<12} "
-              f"{nodes_str:<10}")
-
-    print(f"\nWin Rate Legend:")
-    print(f"Win Rate: Overall win percentage across all games")
-    print(f"Taker WR: Win rate when the agent is the taker")
-    print(f"Defender WR: Win rate when the agent is a defender")
+        state.apply_action(action)
+        state.next()
 
 
 def main():
     """Main function to run comprehensive strategy comparison"""
-    print("French Tarot Strategy Comparison")
-    print("This will test all available strategies with comprehensive metrics")
-
     # Define strategies to test
+    games_per_strategy = 100  # Number of games to play for each strategy
     strategies = [
-        # StrategyType.RANDOM,
-        # StrategyType.MAX_CARD,
-        # StrategyType.MIN_CARD,
-        StrategyType.IS_MCTS_PER_ACTION,
-        StrategyType.IS_MCTS_PER_TRICK
+        StrategyType.RANDOM,
+        StrategyType.MAX_CARD,
+        StrategyType.MIN_CARD,
+        StrategyType.RIS_MCTS
     ]
-
-    # Run comparison
-    results = compare_strategies(
-        strategies=strategies,
-        iterations=200,  # MCTS iterations per decision
-        games_per_strategy=20,  # Number of games per strategy
-        verbose=False  # Set to True for detailed output
+    mcts_config = ISMCTSConfig(
+        iterations=100,  # Number of MCTS iterations
+        exploration_constant=1.4,  # Exploration constant for MCTS
+        pw_alpha=0.5,  # Progressive widening alpha
+        pw_constant=2.0  # Progressive widening constant
     )
 
-    print(f"\n{'='*80}")
-    print("STRATEGY COMPARISON COMPLETED")
-    print(f"{'='*80}")
+    # Run comparison
+    for strategy in strategies:
+        for game_num in range(games_per_strategy):
+            print(f"Playing game {game_num + 1}",
+                  f"with strategy: {strategy.value}")
+            play_with_strategy(strategy, mcts_config)
 
 
+SEED = 7264828
 if __name__ == "__main__":
+    random.seed(SEED)
     main()

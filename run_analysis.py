@@ -13,25 +13,19 @@ import matplotlib.pyplot as plt
 
 def run_simulation_only(iterations=200, games=5, determinizations=10, verbose=False):
     """Run only the simulation without plotting"""
-    from simulation import compare_strategies, StrategyType
+    from simulation import main as compare_strategies, StrategyType
 
+    # Define strategies to test
     strategies = [
         StrategyType.RANDOM,
         StrategyType.MAX_CARD,
         StrategyType.MIN_CARD,
-        StrategyType.IS_MCTS_PER_ACTION,
-        StrategyType.IS_MCTS_PER_TRICK
+        StrategyType.RIS_MCTS
     ]
 
     print(
         f"Running simulation with {iterations} iterations and {games} games per strategy...")
-    results = compare_strategies(
-        strategies=strategies,
-        iterations=iterations,
-        games_per_strategy=games,
-        determinizations=determinizations,
-        verbose=verbose
-    )
+    results = compare_strategies()
 
     return results
 
@@ -49,53 +43,42 @@ def run_plotting_only():
 
 def run_full_pipeline(iterations=200, games=5, verbose=False):
     """Run simulation and create plots"""
-    try:
-        from plot_metrics import main as full_main
 
-        # Modify the main function to use our parameters
-        from plot_metrics import run_simulation_and_collect_data, save_results_to_json
-        from plot_metrics import (create_time_metrics_plot, create_decision_metrics_plot,
-                                  create_mcts_metrics_plot, create_memory_and_game_metrics_plot,
-                                  create_comprehensive_comparison_plot)
+    print("Running full pipeline...")
 
-        print("Running full pipeline...")
 
-        # Run simulation
-        results = run_simulation_and_collect_data(
-            iterations=iterations, games_per_strategy=games)
+def create_plots(results):
+    # Modify the main function to use our parameters
+    from plot_metrics import save_results_to_json
+    from plot_metrics import (create_time_metrics_plot, create_decision_metrics_plot,
+                              create_mcts_metrics_plot, create_memory_and_game_metrics_plot,
+                              create_comprehensive_comparison_plot)
+    # Save results
+    save_results_to_json(results)
 
-        # Save results
-        save_results_to_json(results)
+    # Create plots
+    print("\nCreating visualization plots...")
+    create_time_metrics_plot(results)
+    create_decision_metrics_plot(results)
+    create_mcts_metrics_plot(results)
+    create_memory_and_game_metrics_plot(results)
+    create_comprehensive_comparison_plot(results)
 
-        # Create plots
-        print("\nCreating visualization plots...")
-        create_time_metrics_plot(results)
-        create_decision_metrics_plot(results)
-        create_mcts_metrics_plot(results)
-        create_memory_and_game_metrics_plot(results)
-        create_comprehensive_comparison_plot(results)
+    # Also create dashboard plots
+    from plot_from_results import create_summary_dashboard, create_comparison_analysis
+    create_summary_dashboard(results)
+    create_comparison_analysis(results)
 
-        # Also create dashboard plots
-        from plot_from_results import create_summary_dashboard, create_comparison_analysis
-        create_summary_dashboard(results)
-        create_comparison_analysis(results)
-
-        print("\nAll plots created successfully!")
-        print("Generated files:")
-        print("- time_metrics.png")
-        print("- decision_metrics.png")
-        print("- mcts_metrics.png")
-        print("- memory_game_metrics.png")
-        print("- comprehensive_comparison.png")
-        print("- strategy_dashboard.png")
-        print("- strategy_analysis.png")
-        print("- simulation_results.json")
-
-    except ImportError as e:
-        print(f"Error importing required modules: {e}")
-        print("Make sure matplotlib, seaborn, and numpy are installed.")
-    except Exception as e:
-        print(f"Error in pipeline: {e}")
+    print("\nAll plots created successfully!")
+    print("Generated files:")
+    print("- time_metrics.png")
+    print("- decision_metrics.png")
+    print("- mcts_metrics.png")
+    print("- memory_game_metrics.png")
+    print("- comprehensive_comparison.png")
+    print("- strategy_dashboard.png")
+    print("- strategy_analysis.png")
+    print("- simulation_results.json")
 
 
 def main():

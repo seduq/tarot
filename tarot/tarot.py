@@ -213,15 +213,16 @@ class Tarot:
         Updates the trick history where the Fool card was played.
         It substitutes a card from another trick of the team.
         """
-        fool_tricks = [trick for trick in self.tricks if Const.FOOL in trick]
-        if not fool_tricks:
+        fool_trick = next((
+            (p, trick) for p, trick in self.tricks if Const.FOOL in trick), None)
+        if not fool_trick:
             return
-        _, fool_trick = fool_tricks[-1]
-        fool_player = fool_trick.index(Const.FOOL)
+        trick_winner, trick = fool_trick
+        fool_player = trick.index(Const.FOOL)
 
         if fool_player > -1:
             substitute_card = Action.apply_fool_action(
-                fool_trick, fool_player, self.taker == fool_player, self.tricks)
+                trick, fool_player, self.taker == fool_player, self.tricks)
             if substitute_card is None:
                 return
             idx = self.played_tricks.index(Const.FOOL)
@@ -272,29 +273,29 @@ class Tarot:
                   self.phase.value]
         return tensor
 
-    def from_tensor(self, tensor: List[int]) -> None:
-
-        self.played_cards = Utils.get_mask(tensor, 'played_cards',)
-        self.taker_chien_hand = Utils.get_mask(tensor, 'taker_chien_hand')
-        self.played_tricks = Utils.get_mask(tensor, 'played_tricks')
-        self.trick = Utils.get_mask(tensor, 'current_trick')
-        self.current = Utils.get_mask(tensor, 'current_player')[0]
-        self.taker = Utils.get_mask(tensor, 'taker_player')[0]
-        self.bids = Utils.get_mask(tensor, 'bids')
-        declarations = Utils.get_mask(tensor, 'declarations')
-        phase = Utils.get_mask(tensor, 'phase')[0]
-
-        self.tricks = Utils.get_tricks(self.played_tricks)
-        self.chelem_declared_taker = bool(declarations[0])
-        self.chelem_declared_defenders = bool(declarations[1])
-        self.poignee_declared_taker = bool(declarations[2])
-        self.poignee_declared_defenders = bool(declarations[3])
-        self.phase = Const.Phase(phase)
-
-    def clone(self):
+    def clone(self, player: int = -1) -> 'Tarot':
         clone = Tarot()
-        clone.from_tensor(self.tensor(-1))
-        clone.hands = [hand.copy() for hand in self.hands]
+        clone.played_cards = self.played_cards.copy()
+        clone.played_tricks = self.played_tricks.copy()
+        clone.taker_chien_hand = self.taker_chien_hand.copy()
+        clone.trick = self.trick.copy()
+        clone.current = self.current
+        clone.taker = self.taker
+        clone.bids = self.bids.copy()
+        for p, t in self.tricks:
+            clone.tricks.append((p, t.copy()))
+        for c, p in self.declared:
+            clone.declared.append((c, p))
+        clone.chelem_declared_taker = self.chelem_declared_taker
+        clone.chelem_declared_defenders = self.chelem_declared_defenders
+        clone.poignee_declared_taker = self.poignee_declared_taker
+        clone.poignee_declared_defenders = self.poignee_declared_defenders
+        clone.phase = self.phase
+        if player < 0:
+            clone.hands = [hand.copy() for hand in self.hands]
+        else:
+            clone.hands = [self.hands[player].copy() if i == player else []
+                           for i in range(Const.NUM_PLAYERS)]
         clone.chien = self.chien.copy()
         clone.discard = self.discard.copy()
         clone.declared = self.declared.copy()
