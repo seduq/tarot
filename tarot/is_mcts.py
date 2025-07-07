@@ -64,7 +64,7 @@ class TarotISMCTSNode:
         self.expanded_actions = set()  # Actions that have been tried from this node
 
         # Metrics
-        self.miss = 0  # Number of times we had to select unexplored actions
+        self.illegal = 0  # Number of times we had to select unexplored actions
         self.exploration_constant = exploration_constant
 
     def ucb_score(self, action, c=1.4):
@@ -114,7 +114,7 @@ class TarotISMCTSNode:
             action = random.choice(legal_actions)
             self.expanded_actions.add(action)
             self.n_action[action] = 0
-            self.miss += 1  # Track that we had to make a random choice
+            self.illegal += 1  # Track that we had to make a random choice
             return action
 
         # Use UCB1 to select among expanded actions
@@ -185,7 +185,7 @@ class TarotISMCTSAgent:
         self.total_simulations_run = 0
         self.nodes_created_this_decision = 0
         self.simulations_this_decision = 0
-        self.misses_this_decision = 0
+        self.illegal_this_decision = 0
 
         # The search tree: maps information sets to their corresponding nodes
         self.tree: Dict[TarotInformationSet, TarotISMCTSNode] = {}
@@ -209,7 +209,7 @@ class TarotISMCTSAgent:
         # Reset per-decision statistics
         self.nodes_created_this_decision = 0
         self.simulations_this_decision = 0
-        self.misses_this_decision = 0
+        self.illegal_this_decision = 0
         nodes_before = len(self.tree)
 
         # Get or create the root node for the current information set
@@ -282,7 +282,6 @@ class TarotISMCTSAgent:
 
             # Default to random action selection
             action = random.choice(legal)
-            used_fallback = False
 
             # Get or create the node for this information set
             if info not in self.tree:
@@ -298,13 +297,15 @@ class TarotISMCTSAgent:
                 # Progressive widening suggests we should try a new action
                 action = random.choice(unexplored)
                 node.expanded_actions.add(action)
-            elif node.expanded_actions:
-                # Use UCB1 to select among previously tried actions
-                action = node.select_action(legal)
             else:
-                # Had to fall back to random selection (count as a "miss")
-                used_fallback = True
-                self.misses_this_decision += 1
+                # Always have at least one expanded action
+                # Use UCB1 to select among previously tried actions
+                # Even if doesn't expand, we can still select from existing actions
+                missed = node.illegal
+                action = node.select_action(legal)
+                # Track if we had to select an action not in unexplored and illegal
+                if node.illegal > missed:
+                    self.illegal_this_decision += 1
 
             # Apply the selected action and move to the next state
             game.apply_action(action)
@@ -435,4 +436,4 @@ class TarotISMCTSAgent:
         Returns:
             Tuple of (nodes_created_this_decision, misses_this_decision)
         """
-        return self.nodes_created_this_decision, self.misses_this_decision
+        return self.nodes_created_this_decision, self.illegal_this_decision

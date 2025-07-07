@@ -204,55 +204,6 @@ class MetricsReporter:
                     f"  {i}. {strategy.replace('_', ' ').title()}: {score*100:.1f}%\n")
 
             f.write("\n")
-
-            # Insights and Recommendations
-            f.write("INSIGHTS AND RECOMMENDATIONS\n")
-            f.write("-" * 40 + "\n")
-
-            if len(sorted_strategies) >= 2:
-                best_strategy = sorted_strategies[0][0]
-                worst_strategy = sorted_strategies[-1][0]
-
-                f.write(
-                    f"• Best overall strategy: {best_strategy.replace('_', ' ').title()}\n")
-                f.write(
-                    f"• Needs improvement: {worst_strategy.replace('_', ' ').title()}\n")
-
-            # MCTS performance insights (only if we have MCTS data)
-            if mcts_games:
-                # Get decision times again for insights section
-                mcts_decision_times = []
-                for game in mcts_games:
-                    mcts_times = [t for t in game.decision_times if t > 0.0]
-                    mcts_decision_times.extend(mcts_times)
-
-                if mcts_decision_times:
-                    mcts_avg_time = statistics.mean(mcts_decision_times)
-                    if mcts_avg_time > 1.0:
-                        f.write(
-                            f"• MCTS is taking {mcts_avg_time:.2f}s per decision - consider reducing iterations\n")
-                    elif mcts_avg_time < 0.1:
-                        f.write(
-                            f"• MCTS is very fast ({mcts_avg_time:.3f}s) - could increase iterations for better play\n")
-
-            # Game length insights
-            all_game_lengths = []
-            for strategy in all_strategies:
-                games = self.collector.get_strategy_metrics(strategy)
-                lengths = [len(game.legal_moves_history)
-                           for game in games if game.legal_moves_history]
-                all_game_lengths.extend(lengths)
-
-            if all_game_lengths:
-                avg_game_length = statistics.mean(all_game_lengths)
-                if avg_game_length > 100:
-                    f.write(
-                        f"• Games are quite long (avg {avg_game_length:.0f} turns) - this is typical for Tarot\n")
-                elif avg_game_length < 50:
-                    f.write(
-                        f"• Games are unusually short (avg {avg_game_length:.0f} turns) - check game logic\n")
-
-            f.write("\n")
             f.write("=" * 80 + "\n")
             f.write("End of Report\n")
             f.write("=" * 80 + "\n")

@@ -21,6 +21,8 @@ class GameMetrics:
     # Win rates
     taker_won: bool
     defender_won: bool
+    taker_game: int = 0  # Number of games where taker won by tricks
+    defender_game: int = 0  # Number of games where defender won by tricks
     # Game progression
     legal_moves_history: List[int] = field(default_factory=list)
     decision_times: List[float] = field(default_factory=list)  # Only for MCTS
@@ -28,7 +30,7 @@ class GameMetrics:
     # Nodes created per MCTS decision
     nodes_created: List[int] = field(default_factory=list)
     # Illegal move attempts per MCTS decision
-    illegal_moves: List[int] = field(default_factory=list)
+    missed_moves: List[int] = field(default_factory=list)
     # Game info
     num_mcts_agents: int = 0
     mcts_config: Dict[str, Any] = field(default_factory=dict)
@@ -58,10 +60,18 @@ class MetricsCollector:
         total_games = len(strategy_games)
         taker_wins = sum(1 for game in strategy_games if game.taker_won)
         defender_wins = sum(1 for game in strategy_games if game.defender_won)
+        taker_games = sum(
+            1 for game in strategy_games if game.taker_game > 0)
+        defender_games = sum(
+            1 for game in strategy_games if game.defender_game > 0)
+
+        print(f"Strategy: {strategy}, Total Games: {total_games}, "
+              f"Taker Wins: {taker_wins}, Defender Wins: {defender_wins}, "
+              f"Taker Games: {taker_games}, Defender Games: {defender_games}")
 
         return {
-            "taker_win_rate": taker_wins / total_games,
-            "defender_win_rate": defender_wins / total_games
+            "taker_win_rate": taker_wins / max(1, taker_games),
+            "defender_win_rate": defender_wins / max(1, defender_games)
         }
 
     def get_average_legal_moves(self, strategy: str, normalize: bool = False, smoothing_window: int = 3) -> List[float]:
@@ -183,14 +193,14 @@ class MetricsCollector:
     def get_average_illegal_moves(self, strategy: str) -> float:
         """Get average number of illegal move attempts per MCTS decision for a strategy."""
         strategy_games = self.get_strategy_metrics(strategy)
-        mcts_games = [game for game in strategy_games if game.illegal_moves]
+        mcts_games = [game for game in strategy_games if game.missed_moves]
 
         if not mcts_games:
             return 0.0
 
         all_illegal = []
         for game in mcts_games:
-            all_illegal.extend(game.illegal_moves)
+            all_illegal.extend(game.missed_moves)
 
         return sum(all_illegal) / len(all_illegal) if all_illegal else 0.0
 
@@ -212,10 +222,12 @@ class MetricsCollector:
                     "game_id": game.game_id,
                     "taker_won": game.taker_won,
                     "defender_won": game.defender_won,
+                    "taker_game": game.taker_game,
+                    "defender_game": game.defender_game,
                     "legal_moves_history": game.legal_moves_history,
                     "decision_times": game.decision_times,
                     "nodes_created": game.nodes_created,
-                    "illegal_moves": game.illegal_moves,
+                    "illegal_moves": game.missed_moves,
                     "num_mcts_agents": game.num_mcts_agents,
                     "mcts_config": game.mcts_config
                 }
@@ -239,10 +251,12 @@ class MetricsCollector:
                 game_id=game_data["game_id"],
                 taker_won=game_data["taker_won"],
                 defender_won=game_data["defender_won"],
+                taker_game=game_data["taker_game"],
+                defender_game=game_data["defender_game"],
                 legal_moves_history=game_data["legal_moves_history"],
                 decision_times=game_data["decision_times"],
                 nodes_created=game_data.get("nodes_created", []),
-                illegal_moves=game_data.get("illegal_moves", []),
+                missed_moves=game_data.get("illegal_moves", []),
                 num_mcts_agents=game_data["num_mcts_agents"],
                 mcts_config=game_data["mcts_config"]
             )

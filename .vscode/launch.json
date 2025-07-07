@@ -12,6 +12,13 @@
             "console": "integratedTerminal"
         },
         {
+            "name": "Plot",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "plot_basic.py",
+            "console": "integratedTerminal"
+        },
+        {
             "name": "Python Debugger: Current File",
             "type": "debugpy",
             "request": "launch",

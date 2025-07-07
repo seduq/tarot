@@ -28,7 +28,7 @@ def plot_win_rates(collector: MetricsCollector, strategies: List[str], save_path
         expected_games: Expected number of games per strategy
     """
     # Create subplots for taker and defender win rates
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 6))
 
     taker_rates = []
     defender_rates = []
@@ -48,26 +48,26 @@ def plot_win_rates(collector: MetricsCollector, strategies: List[str], save_path
                     '#ff7f0e', '#2ca02c', '#d62728', '#1f77b4'])
     ax1.set_title('Taker Win Rate by Strategy')
     ax1.set_ylabel('Win Rate')
-    ax1.set_ylim(0, 1)
+    ax1.set_ylim(0, 1.2)
 
     # Add value labels on bars with game counts
     for bar, rate, count in zip(bars1, taker_rates, game_counts):
         height = bar.get_height()
         ax1.text(bar.get_x() + bar.get_width()/2., height + 0.01,
-                 f'{rate:.3f}\n({count} games)', ha='center', va='bottom', fontsize=9)
+                 f'{(rate * 100):.1f}%', ha='center', va='bottom', fontsize=9)
 
     # Defender win rates
     bars2 = ax2.bar(strategies, defender_rates, color=[
                     '#ff7f0e', '#2ca02c', '#d62728', '#1f77b4'])
     ax2.set_title('Defender Win Rate by Strategy')
     ax2.set_ylabel('Win Rate')
-    ax2.set_ylim(0, 1)
+    ax2.set_ylim(0, 1.2)
 
     # Add value labels on bars with game counts
     for bar, rate, count in zip(bars2, defender_rates, game_counts):
         height = bar.get_height()
         ax2.text(bar.get_x() + bar.get_width()/2., height + 0.01,
-                 f'{rate:.3f}\n({count} games)', ha='center', va='bottom', fontsize=9)
+                 f'{(rate * 100):.1f}%', ha='center', va='bottom', fontsize=9)
 
     plt.tight_layout()
 
@@ -157,8 +157,8 @@ def plot_decision_times(collector: MetricsCollector, save_path: Optional[str] = 
 
         plt.title(
             f'RIS-MCTS Average Decision Time Through MCTS Decisions ({game_count} games)')
-        plt.xlabel('MCTS Decision Number')
-        plt.ylabel('Cumulative Average Decision Time (seconds)')
+        plt.xlabel('Progression of MCTS Decisions')
+        plt.ylabel('Average Decision Time (seconds)')
         plt.legend()
         plt.grid(True, alpha=0.3)
     else:

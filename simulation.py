@@ -10,7 +10,7 @@ multiple games with different agent configurations and tracking their performanc
 """
 
 from dataclasses import dataclass
-from typing import List
+from typing import List, Optional
 from tarot import Tarot
 from tarot.is_mcts import TarotISMCTSAgent
 from tarot.constants import Phase
@@ -181,7 +181,10 @@ class MCTSStrategyAgent(StrategyAgent):
         return action
 
 
-def play_with_strategy(strategy_type: StrategyType, config: ISMCTSConfig, max_mcts_agents: int = 1, game_id: int = 0) -> GameMetrics:
+def play_with_strategy(strategy_type: StrategyType,
+                       config: ISMCTSConfig,
+                       num_mcts_agents: int = 1,
+                       game_id: int = 0) -> GameMetrics:
     """
     Execute a single Tarot game with mixed strategy agents and collect metrics.
 
@@ -194,17 +197,27 @@ def play_with_strategy(strategy_type: StrategyType, config: ISMCTSConfig, max_mc
     Returns:
         GameMetrics: Collected metrics from the game
     """
+    if num_mcts_agents < 1 and strategy_type == StrategyType.RIS_MCTS:
+        num_mcts_agents = 1
     # Initialize a new game state
     state = Tarot()
     agents: List[StrategyAgent] = []
-
+    agent: Optional[StrategyAgent] = None
+    left_positions = list(range(Const.NUM_PLAYERS))
+    agent_position = random.randint(0, Const.NUM_PLAYERS - 1)
+    if strategy_type != StrategyType.RIS_MCTS:
+        agent = StrategyAgent(agent_position, strategy_type)
+        num_mcts_agents = max(1, min(num_mcts_agents, Const.NUM_PLAYERS)) - 1
+    else:
+        agent = MCTSStrategyAgent(agent_position, strategy_type, config)
+    left_positions.remove(agent_position)
     # Initialize metrics collection
     metrics = GameMetrics(
         strategy=strategy_type.value,
         game_id=game_id,
         taker_won=False,
         defender_won=False,
-        num_mcts_agents=0,
+        num_mcts_agents=num_mcts_agents + 1,
         mcts_config={
             "iterations": config.iterations,
             "exploration_constant": config.exploration_constant,
@@ -212,27 +225,20 @@ def play_with_strategy(strategy_type: StrategyType, config: ISMCTSConfig, max_mc
             "pw_constant": config.pw_constant
         }
     )
-
+    mcts_agents_positions = []
     # Determine how many MCTS agents to use for this game
-    if strategy_type == StrategyType.RIS_MCTS:
-        num_mcts_agents = random.randint(
-            1, min(max_mcts_agents, Const.NUM_PLAYERS))
+    if num_mcts_agents > 0:
         # Randomly select which player positions will use MCTS
-        mcts_positions = random.sample(
-            range(Const.NUM_PLAYERS), num_mcts_agents)
-        metrics.num_mcts_agents = num_mcts_agents
-    else:
-        # For non-MCTS strategies, randomly select one player position
-        mcts_positions = [random.randint(0, Const.NUM_PLAYERS - 1)]
+        mcts_agents_positions = random.sample(left_positions, num_mcts_agents)
 
     # Create agents for all players
     for i in range(Const.NUM_PLAYERS):
-        if i in mcts_positions and strategy_type == StrategyType.RIS_MCTS:
+        if i == agent_position and strategy_type == StrategyType.RIS_MCTS:
             # Assign the MCTS strategy to selected players
+            agents.append(agent)
+        elif i in mcts_agents_positions:
+            # Assign MCTS strategy to randomly selected players
             agents.append(MCTSStrategyAgent(i, strategy_type, config))
-        elif i in mcts_positions:
-            # Assign the test strategy to the selected player (for non-MCTS strategies)
-            agents.append(StrategyAgent(i, strategy_type))
         else:
             # Assign random basic strategies to other players
             strategies = [
@@ -273,28 +279,33 @@ def play_with_strategy(strategy_type: StrategyType, config: ISMCTSConfig, max_mc
                 metrics.decision_times.append(decision_time)
 
                 # Collect MCTS-specific metrics
-                nodes_created, illegal_moves = current_agent.mcts_agent.get_last_decision_stats()
+                nodes_created, missed_moves = current_agent.mcts_agent.get_last_decision_stats()
                 metrics.nodes_created.append(nodes_created)
-                metrics.illegal_moves.append(illegal_moves)
+                metrics.missed_moves.append(missed_moves)
             else:
                 action = current_agent.get_action(state)
                 # Add minimal time for non-MCTS agents to keep arrays same length
                 metrics.decision_times.append(0.0)
                 # Add zero values for MCTS-specific metrics for non-MCTS agents
                 metrics.nodes_created.append(0)
-                metrics.illegal_moves.append(0)
+                metrics.missed_moves.append(0)
 
         # Apply the selected action and advance to the next state
         state.apply_action(action)
         state.next()
 
-    # Determine game outcome (simplified - you may need to adjust based on your Tarot implementation)
-    # This is a placeholder - replace with actual win condition checking
+    # Determine game outcome
     if state.is_terminal():
-        # Randomly assign win for demonstration - replace with actual game result logic
-        taker_won = random.choice([True, False])
-        metrics.taker_won = taker_won
-        metrics.defender_won = not taker_won
+        # Collect final game metrics
+        returns = state.returns()
+        # Determine who is the taker and defender
+        # If the agent is the taker, check if they is the taker
+        if agent_position == state.taker:
+            metrics.taker_game += 1
+            metrics.taker_won = returns[agent_position] > 0
+        else:
+            metrics.defender_game += 1
+            metrics.defender_won = returns[agent_position] > 0
 
     return metrics
 
@@ -316,7 +327,7 @@ def parse_arguments():
         "--games", "-g",
         type=int,
         default=100,
-        help="Number of games to simulate per strategy"
+        help="Number of games to simulate per strategy (default: 100)"
     )
 
     parser.add_argument(
@@ -324,7 +335,7 @@ def parse_arguments():
         type=int,
         default=1,
         choices=range(1, Const.NUM_PLAYERS + 1),
-        help="Maximum number of RIS-MCTS agents in a single game"
+        help="Maximum number of RIS-MCTS agents in a single game (default: 1)"
     )
 
     # RIS-MCTS configuration
@@ -332,36 +343,36 @@ def parse_arguments():
         "--mcts-iterations", "-i",
         type=int,
         default=100,
-        help="Number of MCTS iterations per decision"
+        help="Number of MCTS iterations per decision (default: 100)"
     )
 
     parser.add_argument(
         "--exploration-constant", "-e",
         type=float,
         default=1.4,
-        help="UCB1 exploration constant for MCTS"
+        help="UCB1 exploration constant for MCTS (default: 1.4)"
     )
 
     parser.add_argument(
         "--pw-alpha", "-a",
         type=float,
         default=0.5,
-        help="Progressive widening alpha parameter"
+        help="Progressive widening alpha parameter (default: 0.5)"
     )
 
     parser.add_argument(
         "--pw-constant", "-c",
         type=float,
         default=2.0,
-        help="Progressive widening constant parameter"
+        help="Progressive widening constant parameter (default: 2.0)"
     )
 
     # Other options
     parser.add_argument(
         "--seed", "-s",
         type=int,
-        default=7264828,
-        help="Random seed for reproducible results"
+        default=42,
+        help="Random seed for reproducible results (default: 42)"
     )
 
     parser.add_argument(
@@ -456,8 +467,8 @@ def main():
         reporter = MetricsReporter(collector)
 
         # Generate text and CSV reports in results directory
-        text_report = f"simulation_report_seed_{args.seed}.txt"
-        csv_report = f"simulation_summary_seed_{args.seed}.csv"
+        text_report = f"simulation_report.txt"
+        csv_report = f"simulation_summary.csv"
 
         reporter.generate_summary_report("results", text_report)
         reporter.generate_csv_summary("results", csv_report)

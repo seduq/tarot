@@ -41,7 +41,7 @@ def run_mcts_comparison(configs: List[Dict], games_per_config: int = 200, seed: 
             metrics = play_with_strategy(
                 StrategyType.RIS_MCTS,
                 config,
-                max_mcts_agents=1,
+                num_mcts_agents=1,
                 game_id=game_id
             )
             collector.add_game(metrics)
@@ -107,10 +107,17 @@ def plot_mcts_parameter_sweep(games_per_config: int = 200, seed: int = 42,
     taker_rates = []
     avg_decision_times = []
 
+    iterations_set = set()
+    exploration_set = set()
+    pw_alpha_set = set()
+
     for config in configs:
         # Create readable config name
         name = f"i={config['iterations']}, e={config['exploration_constant']}, a={config['pw_alpha']}"
         config_names.append(name)
+        iterations_set.add(config['iterations'])
+        exploration_set.add(config['exploration_constant'])
+        pw_alpha_set.add(config['pw_alpha'])
 
         # Filter games for this config
         config_games = [
@@ -121,7 +128,8 @@ def plot_mcts_parameter_sweep(games_per_config: int = 200, seed: int = 42,
         # Calculate win rate
         if config_games:
             taker_wins = sum(1 for game in config_games if game.taker_won)
-            taker_rate = taker_wins / len(config_games)
+            taker_games = sum(1 for game in config_games if game.taker_game)
+            taker_rate = (taker_wins / max(1, taker_games))
             taker_rates.append(taker_rate)
 
             # Calculate average decision time
@@ -138,6 +146,7 @@ def plot_mcts_parameter_sweep(games_per_config: int = 200, seed: int = 42,
     bars = ax1.bar(range(len(configs)), taker_rates, color='skyblue')
     ax1.set_title('Taker Win Rate by MCTS Configuration')
     ax1.set_ylabel('Win Rate')
+    ax1.set_ylim(0, 1.2)
     ax1.set_xticks(range(len(configs)))
     ax1.set_xticklabels(config_names, rotation=45, ha='right')
 
@@ -156,24 +165,32 @@ def plot_mcts_parameter_sweep(games_per_config: int = 200, seed: int = 42,
     ax2.set_xticklabels(config_names, rotation=45, ha='right')
 
     # Group by parameter type for easier comparison
-    iterations_idx = [0, 1, 2]
-    exploration_idx = [3, 4, 5]
-    pw_alpha_idx = [6, 7, 8]
+    start = 0
+    end = len(iterations_set)
+    iterations_idx = range(start, end)
+    start = end
+    end += len(exploration_set)
+    exploration_idx = range(start, end)
+    start = end
+    end += len(pw_alpha_set)
+    pw_alpha_idx = range(start, end)
 
     # Iterations comparison
-    ax3.bar(range(3), [taker_rates[i] for i in iterations_idx],
+    ax3.bar(range(len(iterations_idx)), [taker_rates[i] for i in iterations_idx],
             color=['lightblue', 'blue', 'darkblue'])
     ax3.set_title('Win Rate vs Iterations')
-    ax3.set_xticks(range(3))
-    ax3.set_xticklabels(['100', '200', '300'])
+    ax1.set_ylim(0, 1.2)
+    ax3.set_xticks(range(len(iterations_set)))
+    ax3.set_xticklabels(iterations_set)
     ax3.set_ylabel('Taker Win Rate')
 
     # Exploration constant comparison
-    ax4.bar(range(3), [taker_rates[i] for i in exploration_idx],
+    ax4.bar(range(len(exploration_idx)), [taker_rates[i] for i in exploration_idx],
             color=['lightgreen', 'green', 'darkgreen'])
     ax4.set_title('Win Rate vs Exploration Constant')
-    ax4.set_xticks(range(3))
-    ax4.set_xticklabels(['1.0', '1.4', '2.0'])
+    ax1.set_ylim(0, 1.2)
+    ax4.set_xticks(range(len(exploration_set)))
+    ax4.set_xticklabels(exploration_set)
     ax4.set_ylabel('Taker Win Rate')
 
     plt.tight_layout()
@@ -210,7 +227,8 @@ def plot_mcts_parameter_sweep(games_per_config: int = 200, seed: int = 42,
             game for game in collector.games if game.mcts_config == config]
         if config_games:
             taker_wins = sum(1 for game in config_games if game.taker_won)
-            taker_rate = taker_wins / len(config_games)
+            taker_rate = (taker_wins /
+                          max(1, sum(1 for game in config_games if game.taker_game)))
 
             all_nodes = []
             for game in config_games:
@@ -258,7 +276,8 @@ def generate_text_comparison(collector: MetricsCollector, configs: List[Dict]) -
         if config_games:
             # Calculate win rate
             taker_wins = sum(1 for game in config_games if game.taker_won)
-            taker_rate = taker_wins / len(config_games)
+            taker_games = sum(1 for game in config_games if game.taker_game)
+            taker_rate = (taker_wins / max(1, taker_games))
 
             # Calculate average decision time
             all_times = []
@@ -275,12 +294,12 @@ def generate_text_comparison(collector: MetricsCollector, configs: List[Dict]) -
             # Calculate average illegal moves
             all_illegal = []
             for game in config_games:
-                all_illegal.extend(game.illegal_moves)
+                all_illegal.extend(game.missed_moves)
             avg_illegal = np.mean(all_illegal) if all_illegal else 0
 
             report.append(f"  Results ({len(config_games)} games):")
             report.append(
-                f"    Taker Win Rate: {taker_rate:.3f} ({taker_wins}/{len(config_games)})")
+                f"    Taker Win Rate: {taker_rate:.3f} ({taker_wins}/{taker_games})")
             report.append(f"    Avg Decision Time: {avg_time:.4f} seconds")
             report.append(
                 f"    Avg Nodes Created per Decision: {avg_nodes:.1f}")
@@ -305,7 +324,8 @@ def generate_text_comparison(collector: MetricsCollector, configs: List[Dict]) -
             game for game in collector.games if game.mcts_config == config]
         if config_games:
             taker_wins = sum(1 for game in config_games if game.taker_won)
-            taker_rate = taker_wins / len(config_games)
+            taker_games = sum(1 for game in config_games if game.taker_game)
+            taker_rate = (taker_wins / max(1, taker_games))
 
             all_times = []
             for game in config_games:
@@ -453,8 +473,8 @@ Examples:
                         help='Base progressive widening constant for parameter sweeps (default: 2.0)')
 
     # Sweep parameters
-    parser.add_argument('--iterations', type=int, nargs='+', default=[100, 200, 300],
-                        help='Iterations values for sweep (default: [100, 200, 300])')
+    parser.add_argument('--iterations', type=int, nargs='+', default=[50, 100, 200],
+                        help='Iterations values for sweep (default: [50, 100, 200])')
 
     parser.add_argument('--exploration', type=float, nargs='+', default=[1.0, 1.4, 2.0],
                         help='Exploration constant values for sweep (default: [1.0, 1.4, 2.0])')
@@ -565,11 +585,11 @@ def main():
     else:
         # Use default configs
         configs = [
+            {"iterations": 50, "exploration_constant": 1.4,
+                "pw_alpha": 0.5, "pw_constant": 2.0},
             {"iterations": 100, "exploration_constant": 1.4,
                 "pw_alpha": 0.5, "pw_constant": 2.0},
             {"iterations": 200, "exploration_constant": 1.4,
-                "pw_alpha": 0.5, "pw_constant": 2.0},
-            {"iterations": 300, "exploration_constant": 1.4,
                 "pw_alpha": 0.5, "pw_constant": 2.0},
             {"iterations": 100, "exploration_constant": 1.0,
                 "pw_alpha": 0.5, "pw_constant": 2.0},
