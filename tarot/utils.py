@@ -1,5 +1,4 @@
 from typing import List, Tuple
-import numpy as np
 from .cards import Card
 from .bids import Bid
 from . import constants as Const
@@ -14,7 +13,7 @@ class Utils:
         """
         Calculates the total score for a list of tricks.
         """
-        return float(np.sum([Card.value(card) for trick in tricks for card in trick]))
+        return sum([Card.value(card) for trick in tricks for card in trick])
 
     @staticmethod
     def board_score(tricks: List[List[int]], chien: List[int], bid: int,

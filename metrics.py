@@ -1,5 +1,5 @@
 from tarot import Tarot
-from tarot.mcts import TarotISMCTSAgent
+from tarot.is_mcts import TarotISMCTSAgent
 from tarot.constants import Phase
 from tarot import Const
 import random

@@ -1,14 +1,9 @@
 from dataclasses import dataclass
 from tarot import Tarot
-from tarot.mcts import TarotISMCTSAgent
+from tarot.is_mcts import TarotISMCTSAgent
 from tarot.constants import Phase
 from tarot import Const
 import random
-import time
-import psutil
-import os
-from collections import defaultdict
-from typing import Dict, List, Any, Callable
 from enum import Enum
 
 

@@ -5,7 +5,7 @@ from .utils import Utils
 from .actions import Action
 from . import constants as Const
 from .constants import Phase
-from .mcts import TarotISMCTSAgent
+from .is_mcts import TarotISMCTSAgent
 
 
 __all__ = [

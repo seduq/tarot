@@ -1,4 +1,3 @@
-import numpy as np
 from typing import List, Optional, Tuple
 from .cards import Card
 from .utils import Utils

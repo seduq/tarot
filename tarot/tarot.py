@@ -1,4 +1,4 @@
-from typing import List, Optional, Tuple
+from typing import List, Tuple
 from .actions import Action
 from .bids import Bid
 from .cards import Card
