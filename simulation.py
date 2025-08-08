@@ -482,5 +482,14 @@ def main():
     print("\nUse plot_basic.py to generate plots from this data.")
 
 
+def all_simulation_strategies():
+    # Parse command line arguments
+    args = parse_arguments()
+
+    # Set random seed for reproducible results
+    random.seed(args.seed)
+    pass
+
+
 if __name__ == "__main__":
     main()
