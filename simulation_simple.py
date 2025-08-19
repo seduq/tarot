@@ -1,18 +1,7 @@
-"""
-Tarot Game Strategy Simulation Module
-
-This module provides a framework for testing and comparing different AI strategies
-in the Tarot card game. It includes implementations of basic heuristic strategies
-and Monte Carlo Tree Search (MCTS) agents for performance analysis.
-
-The simulation allows for systematic comparison of strategy effectiveness by running
-multiple games with different agent configurations and tracking their performance.
-"""
-
 import random
 import argparse
 from typing import List
-from tarot_rl.tarot import Tarot, Agent, TarotState
+from tarot_rl.tarot import Tarot, Agent
 from tarot_rl.agents import RandomAgent
 from tarot_rl.constants import NUM_PLAYERS
 
@@ -25,6 +14,9 @@ def play() -> None:
         agents.append(RandomAgent(
             name=f"RandomAgent_{i}", player_id=i, state=state))
     Tarot.play(state, agents)
+    print(f"Game finished with state:")
+    result = Tarot.to_string(state)
+    print(result)
 
 
 def parse_arguments():

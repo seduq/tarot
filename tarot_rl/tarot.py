@@ -28,7 +28,7 @@ class Tarot:
                 tricks=[],
                 trick_player=-1,
                 trick=[-1] * Const.NUM_PLAYERS,
-                trick_winners=[-1] * Const.NUM_TRICKS,
+                trick_winners=[],
                 know_cards=[-1] * Const.DECK_SIZE,
                 declared=[(False, False)],
                 chelem_def=False,
@@ -273,8 +273,10 @@ class Tarot:
             string += f"Bid: {bid_name(state.bids[i])}\n" if len(
                 state.bids) > i else "Bid: N/A\n"
             string += f"Hand [{len(state.hands[i])}]: {", ".join([card_name(card) for card in state.hands[i]])}\n"
-            string += f"Tricks [{len([trick for (p, trick) in state.tricks if p == i])}]: {', '.join(
+            string += f"Tricks [{len([trick for trick in state.tricks])}]: {', '.join(
                 [card_name(card) for j, tricks in enumerate(state.tricks) if j == i for card in tricks])}\n"
+        string += "=" * 10 + "\n"
+        string += f"Winners [{len(state.trick_winners)}]: {', '.join([str(winner) for winner in state.trick_winners])}\n"
         string += "=" * 10 + "\n"
         string += f"Taker Declared Chelem: {state.chelem_taker}\n"
         string += f"Taker Declared Poignee: {state.poignee_taker}\n"

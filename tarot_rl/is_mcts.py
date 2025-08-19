@@ -3,9 +3,11 @@ import math
 from collections import defaultdict
 from typing import List, Dict, Tuple, Optional
 from dataclasses import dataclass
+from .agents import Agent
 from .tarot import Tarot
 from .state import TarotState
 from . import constants as Const
+from .constants import Phase
 
 
 @dataclass
@@ -423,3 +425,26 @@ class IS_MCTS:
         information_set += [game.current]
         information_set += [game.taker]
         return TarotInformationSet(information_set)
+
+
+class IS_Agent(Agent):
+    def __init__(self, name: str, player_id: int, state: TarotState, config: Optional[MctsConfig] = None):
+        super().__init__(name, player_id, state)
+        self.config = config or MctsConfig()
+        self.mcts = IS_MCTS(player_id, mcts_config=self.config)
+
+    def reset(self, player_id: int, state: TarotState):
+        self.mcts = IS_MCTS(player_id, mcts_config=self.config)
+        return super().reset(player_id, state)
+
+    def choose(self, state: TarotState, legal_actions: List[int]) -> int:
+        if (state.phase == Phase.BIDDING or
+            state.phase == Phase.DECLARE or
+                state.phase == Phase.CHIEN):
+            return random.choice(legal_actions)
+        if (state.phase == Phase.TRICK):
+            return self.mcts.run(state)
+        return 0
+
+    def update(self, state: TarotState, action: int, player: int):
+        super().update(state, action, player)
