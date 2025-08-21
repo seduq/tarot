@@ -1,6 +1,6 @@
 import random
 from typing import Dict, List, Optional
-from pyparsing import ABC, abstractmethod
+from abc import ABC, abstractmethod
 from .state import TarotState
 from .constants import Phase
 
